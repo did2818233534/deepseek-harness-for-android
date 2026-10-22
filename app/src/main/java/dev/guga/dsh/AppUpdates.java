@@ -188,16 +188,17 @@ final class AppUpdates {
       return !a.isEmpty() && a.equals(b);
     } catch (Exception ignored) { return false; }
   }
-  static void install(Context c) throws Exception {
-    if (!c.getPackageManager().canRequestPackageInstalls()) return;
+  static void install(Context c) throws Exception { install(c,false); }
+  static void install(Context c, boolean manual) throws Exception {
+    if (!c.getPackageManager().canRequestPackageInstalls()) throw new UpdateFailure("尚未允许安装应用，请检查系统安装权限。");
     long version=prefs(c).getLong("ready", 0);
-    if (!valid(c, apk(c), version)) return;
+    if (!valid(c, apk(c), version)) throw new UpdateFailure("已下载的安装包无效或版本已过期，请重新检查更新。");
     PackageInstaller installer=c.getPackageManager().getPackageInstaller();
     int previous=prefs(c).getInt("session", -1);
     if (previous >= 0 && installer.getSessionInfo(previous) != null) installer.abandonSession(previous);
     PackageInstaller.SessionParams params=new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL);
     params.setAppPackageName(c.getPackageName()); params.setSize(apk(c).length());
-    if (Build.VERSION.SDK_INT >= 31) params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED);
+    if (Build.VERSION.SDK_INT >= 31) params.setRequireUserAction(manual ? PackageInstaller.SessionParams.USER_ACTION_REQUIRED : PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED);
     int id=installer.createSession(params);
     try (PackageInstaller.Session session=installer.openSession(id)) {
       try (InputStream in=new FileInputStream(apk(c)); OutputStream out=session.openWrite("base.apk",0,apk(c).length())) {

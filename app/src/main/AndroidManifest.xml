@@ -11,6 +11,6 @@
  <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity>
  <service android:name=".HarnessService" android:exported="false" android:foregroundServiceType="dataSync"/>
  <receiver android:name=".UpdateResultReceiver" android:exported="false"/>
- <activity android:name=".UpdateInstallActivity" android:exported="false" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:excludeFromRecents="true"/>
+ <activity android:name=".UpdateInstallActivity" android:exported="false" android:theme="@android:style/Theme.Material.Light.Dialog.NoActionBar" android:excludeFromRecents="true"/>
  </application>
 </manifest>

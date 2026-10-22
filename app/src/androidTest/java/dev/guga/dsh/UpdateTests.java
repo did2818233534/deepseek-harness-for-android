@@ -40,6 +40,33 @@ public class UpdateTests {
     if(v instanceof android.widget.Button && "检查更新".contentEquals(((android.widget.Button)v).getText())) { v.performClick(); return; }
     if(v instanceof android.view.ViewGroup) { var group=(android.view.ViewGroup)v; for(int n=0;n<group.getChildCount();n++) clickCheck(group.getChildAt(n)); }
   }
+  @Test public void manualInstallFailureAndConfirmationStayForeground() throws Exception {
+    var i=InstrumentationRegistry.getInstrumentation(); Context c=context();
+    try(var command=i.getUiAutomation().executeShellCommand("appops set dev.guga.dsh REQUEST_INSTALL_PACKAGES allow")) {
+      try(var input=new android.os.ParcelFileDescriptor.AutoCloseInputStream(command)) { while(input.read()!=-1) {} }
+    }
+    AppUpdates.prefs(c).edit().remove("ready").remove("session").commit(); AppUpdates.apk(c).delete();
+    UpdateInstallActivity activity=(UpdateInstallActivity)i.startActivitySync(new android.content.Intent(c,UpdateInstallActivity.class).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
+    try {
+      Thread.sleep(500); i.waitForIdleSync();
+      i.runOnMainSync(() -> {
+        assertNotNull(activity.errorDialog); assertTrue(activity.errorDialog.isShowing());
+        assertTrue(DeviceTests.containsText(activity.errorDialog.getWindow().getDecorView(),"安装包无效"));
+        activity.errorDialog.dismiss();
+      });
+      var monitor=new android.app.Instrumentation.ActivityMonitor(MainActivity.class.getName(),new android.app.Instrumentation.ActivityResult(0,null),true);
+      i.addMonitor(monitor);
+      try {
+        i.runOnMainSync(() -> new UpdateResultReceiver().onReceive(c,new android.content.Intent()
+          .putExtra(android.content.pm.PackageInstaller.EXTRA_STATUS,android.content.pm.PackageInstaller.STATUS_PENDING_USER_ACTION)
+          .putExtra(android.content.Intent.EXTRA_INTENT,new android.content.Intent(c,MainActivity.class))));
+        assertEquals("System confirmation opens directly",1,monitor.getHits());
+        i.runOnMainSync(() -> new UpdateResultReceiver().onReceive(c,new android.content.Intent()
+          .putExtra(android.content.pm.PackageInstaller.EXTRA_STATUS,android.content.pm.PackageInstaller.STATUS_FAILURE_BLOCKED)));
+        i.runOnMainSync(() -> assertTrue(DeviceTests.containsText(activity.errorDialog.getWindow().getDecorView(),"系统阻止")));
+      } finally { i.removeMonitor(monitor); }
+    } finally { i.runOnMainSync(activity::finish); }
+  }
   @Test public void dailyLimitAndManualOverride() {
     assertTrue(AppUpdates.due("", "2026-10-22",false,true));
     assertFalse(AppUpdates.due("2026-10-22", "2026-10-22",false,true));
