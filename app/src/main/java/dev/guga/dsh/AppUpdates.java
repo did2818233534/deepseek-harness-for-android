@@ -19,6 +19,7 @@ final class AppUpdates {
   static final AtomicBoolean running = new AtomicBoolean();
   static volatile okhttp3.OkHttpClient activeClient;
   static volatile String status = "";
+  static volatile boolean readyResult;
   static String failure(Exception e) {
     if (e instanceof java.net.UnknownHostException) return "无法解析 GitHub 地址，请检查网络后重试";
     if (e instanceof java.net.SocketTimeoutException || e instanceof java.io.InterruptedIOException)
@@ -61,7 +62,9 @@ final class AppUpdates {
       try {
         if (!running.compareAndSet(false, true)) return;
         locked = true;
+        cleanupInstalled(c);
         if (!due(prefs(c).getString("checkedDay", ""), today(), manual, enabled(c))) return;
+        readyResult=false;
         status="正在连接 GitHub…";
         prefs(c).edit().putString("checkedDay", today()).apply();
         check(c, manual);
@@ -102,6 +105,16 @@ final class AppUpdates {
         !sha.matches("[a-fA-F0-9]{64}") || size <= 0 || size > MAX_APK) throw new IOException("Invalid release");
     return new Release(version, size, url, sha, root.getString("versionName"));
   }
+  static void cleanupInstalled(Context c) throws Exception {
+    long installed=c.getPackageManager().getPackageInfo(c.getPackageName(),0).getLongVersionCode();
+    long ready=prefs(c).getLong("ready",0);
+    if(ready>0 && ready<=installed) {
+      apk(c).delete();
+      prefs(c).edit().remove("ready").remove("name").remove("session").apply();
+      c.getSystemService(NotificationManager.class).cancel(NOTICE);
+      readyResult=false;
+    }
+  }
   static File apk(Context c) { return new File(c.getFilesDir(), "updates/update.apk"); }
   static void check(Context c, boolean manual) throws Exception {
     PackageInfo installed = c.getPackageManager().getPackageInfo(c.getPackageName(), PackageManager.GET_SIGNING_CERTIFICATES);
@@ -138,6 +151,7 @@ final class AppUpdates {
     File target = apk(c); target.getParentFile().mkdirs();
     if (prefs(c).getLong("ready", 0) == release.version && valid(c, target, release.version)) {
       prefs(c).edit().putLong("success",System.currentTimeMillis()).apply();
+      readyResult=true;
       status="新版本 " + release.name + " 已下载，请点击安装";
       notifyReady(c, release.name); return;
     }
@@ -166,6 +180,7 @@ final class AppUpdates {
       if (target.exists() && !target.delete()) throw new UpdateFailure("无法替换下载文件，请检查存储空间");
       if (!partial.renameTo(target)) throw new UpdateFailure("无法保存安装包，请检查存储空间");
       prefs(c).edit().putLong("success",System.currentTimeMillis()).putLong("ready", release.version).putString("name", release.name).remove("session").apply();
+      readyResult=true;
       status="新版本 " + release.name + " 已下载，请点击安装";
       if (!manual && c.getPackageManager().canRequestPackageInstalls()) install(c);
       else notifyReady(c, release.name);

@@ -751,34 +751,63 @@ public final class MainActivity extends Activity {
     autoUpdate.setOnCheckedChangeListener((v, checked) -> AppUpdates.setEnabled(this, checked));
     update.addView(autoUpdate,new LinearLayout.LayoutParams(dp(56),dp(48)));
     entries.addView(update);
-    Button installUpdate=button("安装已下载的更新",v -> startActivity(new Intent(this,UpdateInstallActivity.class)));
-    installUpdate.setVisibility(AppUpdates.prefs(this).getLong("ready",0)>0 && AppUpdates.apk(this).exists() ? View.VISIBLE : View.GONE);
     Button checkUpdate=button("检查更新",null);
-    TextView updateStatus=label("",14,muted);
-    updateStatus.setPadding(dp(16),dp(12),dp(16),dp(8));
-    updateStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
-    updateStatus.setVisibility(View.GONE);
+    final boolean[] installAction={false};
+    checkUpdate.setSingleLine(false);
+    checkUpdate.setMaxLines(2);
+    checkUpdate.setEllipsize(android.text.TextUtils.TruncateAt.END);
+    checkUpdate.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
     checkUpdate.setOnClickListener(v -> {
-      checkUpdate.setEnabled(false); checkUpdate.setText("正在检查…");
-      updateStatus.setVisibility(View.VISIBLE);
-      updateStatus.setText(AppUpdates.running.get() ? "正在检查或下载，请稍候…" : "正在连接 GitHub…");
+      if(installAction[0] && updateReady()) { startActivity(new Intent(this,UpdateInstallActivity.class)); return; }
+      installAction[0]=false;
+      checkUpdate.setEnabled(false);
+      updateButtonStatus(checkUpdate,"检查更新中…");
       final boolean[] finished={false};
+      final String[] shown={""};
       AppUpdates.checkAsync(this,true,() -> runOnUiThread(() -> finished[0]=true));
       Runnable refresh=new Runnable() { public void run() {
-        if (isFinishing() || isDestroyed() || !updateStatus.isAttachedToWindow()) return;
-        if (!AppUpdates.status.isEmpty() && !AppUpdates.status.contentEquals(updateStatus.getText())) updateStatus.setText(AppUpdates.status);
-        boolean ready=AppUpdates.prefs(MainActivity.this).getLong("ready",0)>0 && AppUpdates.apk(MainActivity.this).exists();
-        installUpdate.setVisibility(ready ? View.VISIBLE : View.GONE);
-        if (finished[0] && !AppUpdates.running.get()) {
-          checkUpdate.setEnabled(true); checkUpdate.setText("检查更新");
-        } else handler.postDelayed(this,400);
+        if (isFinishing() || isDestroyed() || !checkUpdate.isAttachedToWindow()) return;
+        boolean complete=finished[0] && !AppUpdates.running.get();
+        installAction[0]=complete && AppUpdates.readyResult && updateReady();
+        String message=installAction[0] ? "安装更新" : AppUpdates.status;
+        if(!message.isEmpty() && !message.equals(shown[0])) {
+          shown[0]=message; updateButtonStatus(checkUpdate,message);
+        }
+        if (finished[0] && !AppUpdates.running.get()) checkUpdate.setEnabled(true);
+        else handler.postDelayed(this,400);
       }};
       handler.postDelayed(refresh,200);
     });
-    entries.addView(updateStatus,new LinearLayout.LayoutParams(-1,-2));
     addAction(entries,checkUpdate,false);
-    addAction(entries,installUpdate,false);
+    checkUpdate.setAutoSizeTextTypeUniformWithConfiguration(12,16,1,android.util.TypedValue.COMPLEX_UNIT_SP);
     showPage("应用更新", entries);
+  }
+
+  boolean updateReady() {
+    try {
+      return AppUpdates.prefs(this).getLong("ready",0)>getPackageManager().getPackageInfo(getPackageName(),0).getLongVersionCode()
+        && AppUpdates.apk(this).exists();
+    } catch(Exception ignored) { return false; }
+  }
+
+  void updateButtonStatus(Button button,String message) {
+    button.setText(message);
+    button.post(() -> {
+      if(!button.isAttachedToWindow() || !message.contentEquals(button.getText())) return;
+      int width=button.getWidth()-button.getCompoundPaddingLeft()-button.getCompoundPaddingRight();
+      int height=button.getHeight()-button.getCompoundPaddingTop()-button.getCompoundPaddingBottom();
+      if(width<=0 || height<=0) return;
+      android.text.TextPaint paint=new android.text.TextPaint(button.getPaint());
+      paint.setTextSize(android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP,12,getResources().getDisplayMetrics()));
+      android.text.StaticLayout layout=android.text.StaticLayout.Builder.obtain(message,0,message.length(),paint,width)
+        .setIncludePad(button.getIncludeFontPadding()).setLineSpacing(button.getLineSpacingExtra(),button.getLineSpacingMultiplier()).build();
+      if(layout.getLineCount()>2 || layout.getHeight()>height) {
+        button.setText("检查更新");
+        AlertDialog detail=new AlertDialog.Builder(this).setTitle("更新详情").setMessage(message)
+          .setPositiveButton("知道了",null).create();
+        detail.show(); styleDialog(detail,false);
+      }
+    });
   }
 
   void modelSettings() { modelSettings(false); }

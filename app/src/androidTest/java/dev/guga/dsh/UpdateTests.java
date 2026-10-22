@@ -32,9 +32,30 @@ public class UpdateTests {
       AppUpdates.status=AppUpdates.failure(new java.net.UnknownHostException()); AppUpdates.running.set(false);
       Thread.sleep(700);
       i.runOnMainSync(() -> assertTrue(DeviceTests.containsText(activity.currentPage,"无法解析 GitHub")));
+      android.widget.Button button=findButton(activity.currentPage);
+      int height=button.getHeight(),top=button.getTop();
+      i.runOnMainSync(() -> activity.updateButtonStatus(button,"下载好最新版本，点击安装"));
+      Thread.sleep(300);
+      i.runOnMainSync(() -> {
+        assertEquals(height,button.getHeight()); assertEquals(top,button.getTop());
+        assertEquals(2,button.getMaxLines());
+        activity.updateButtonStatus(button,"这里是一段无法在两行内完整显示的更新错误详情。".repeat(12));
+      });
+      Thread.sleep(300);
+      i.runOnMainSync(() -> {
+        assertEquals(height,button.getHeight()); assertEquals(top,button.getTop());
+        assertTrue(DeviceTests.containsText(activity.dialogs.peek().getWindow().getDecorView(),"更新错误详情"));
+        activity.onBackPressed(); activity.onBackPressed(); activity.updateSettings();
+        assertEquals("检查更新",findButton(activity.currentPage).getText().toString());
+      });
     } finally { AppUpdates.running.set(false); i.runOnMainSync(activity::finish); }
     assertTrue(AppUpdates.failure(new java.net.SocketTimeoutException()).contains("超时"));
     assertTrue(AppUpdates.failure(new javax.net.ssl.SSLException("private diagnostic")).contains("安全连接"));
+  }
+  android.widget.Button findButton(android.view.View v) {
+    if(v instanceof android.widget.Button && !(v instanceof android.widget.CompoundButton)) return (android.widget.Button)v;
+    if(v instanceof android.view.ViewGroup) { var g=(android.view.ViewGroup)v; for(int n=0;n<g.getChildCount();n++) { var b=findButton(g.getChildAt(n)); if(b!=null)return b; } }
+    return null;
   }
   void clickCheck(android.view.View v) {
     if(v instanceof android.widget.Button && "检查更新".contentEquals(((android.widget.Button)v).getText())) { v.performClick(); return; }
@@ -66,6 +87,15 @@ public class UpdateTests {
         i.runOnMainSync(() -> assertTrue(DeviceTests.containsText(activity.errorDialog.getWindow().getDecorView(),"系统阻止")));
       } finally { i.removeMonitor(monitor); }
     } finally { i.runOnMainSync(activity::finish); }
+  }
+  @Test public void installedDownloadIsCleanedWithoutNetwork() throws Exception {
+    Context c=context();
+    AppUpdates.apk(c).getParentFile().mkdirs();
+    try(var output=new java.io.FileOutputStream(AppUpdates.apk(c))) { output.write(1); }
+    long version=c.getPackageManager().getPackageInfo(c.getPackageName(),0).getLongVersionCode();
+    AppUpdates.prefs(c).edit().putLong("ready",version).putString("checkedDay",AppUpdates.today()).commit();
+    AppUpdates.cleanupInstalled(c);
+    assertFalse(AppUpdates.apk(c).exists()); assertEquals(0,AppUpdates.prefs(c).getLong("ready",0));
   }
   @Test public void dailyLimitAndManualOverride() {
     assertTrue(AppUpdates.due("", "2026-10-22",false,true));
