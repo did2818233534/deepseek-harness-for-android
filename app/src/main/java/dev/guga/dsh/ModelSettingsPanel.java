@@ -75,8 +75,7 @@ final class ModelSettingsPanel {
       fetch = toggle("网页读取", settings.webFetch());
       steps = a.field(box, "每轮最多步骤", String.valueOf(values.optInt("maxSteps", 32)), false);
       steps.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-      TextView note = a.label("更改自动保存。密钥加密保存在此设备。", 12, a.muted);
-      note.setPadding(a.dp(4), a.dp(8), a.dp(4), 0); box.addView(note);
+
     }
     if (quick) {
       dialog = a.bottomPanel("聊天设置", box);

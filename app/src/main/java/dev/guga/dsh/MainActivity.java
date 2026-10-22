@@ -668,11 +668,28 @@ public final class MainActivity extends Activity {
     body.addView(label);
   }
 
+  LinearLayout helpTitle(String title, int size, int color, String detail) {
+    LinearLayout heading=row();
+    TextView text=label(title,size,color);
+    heading.addView(text,new LinearLayout.LayoutParams(-2,-2,1));
+    if(!detail.isEmpty()) {
+      ImageButton help=icon(R.drawable.ic_help,title+"说明",v -> {
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle(title).setMessage(detail)
+          .setPositiveButton("知道了",null).create();
+        dialog.show(); styleDialog(dialog,false);
+      });
+      help.setPadding(dp(15),dp(15),dp(15),dp(15));
+      help.setImageTintList(android.content.res.ColorStateList.valueOf(muted));
+      heading.addView(help,new LinearLayout.LayoutParams(dp(48),dp(48)));
+    }
+    return heading;
+  }
+
   void settingEntry(LinearLayout body, int glyph, String title, String detail,
       boolean first, boolean last, View.OnClickListener click) {
     LinearLayout entry = row();
-    entry.setPadding(dp(16), dp(16), dp(16), dp(16));
-    entry.setMinimumHeight(dp(80));
+    entry.setPadding(dp(16), dp(8), dp(16), dp(8));
+    entry.setMinimumHeight(dp(64));
     GradientDrawable surface = shape(0xFFECE6F0, 4);
     float top = dp(first ? 24 : 4), bottom = dp(last ? 24 : 4);
     surface.setCornerRadii(new float[] {top, top, top, top, bottom, bottom, bottom, bottom});
@@ -688,11 +705,7 @@ public final class MainActivity extends Activity {
     iconParams.rightMargin = dp(20);
     entry.addView(symbol, iconParams);
     LinearLayout text = new LinearLayout(this);
-    text.setOrientation(LinearLayout.VERTICAL);
-    text.addView(label(title, 18, ink));
-    TextView subtitle = label(detail, 14, muted);
-    subtitle.setPadding(0, dp(4), 0, 0);
-    if (!detail.isEmpty()) text.addView(subtitle);
+    text.addView(helpTitle(title,18,ink,detail),new LinearLayout.LayoutParams(-2,-2));
     entry.addView(text, new LinearLayout.LayoutParams(0, -2, 1));
     TextView arrow = label("›", 24, muted);
     arrow.setPadding(dp(12), 0, 0, 0);
@@ -730,10 +743,8 @@ public final class MainActivity extends Activity {
     LinearLayout update = row();
     update.setPadding(dp(16), dp(16), dp(16), dp(16));
     update.setBackground(shape(UiStyle.SURFACE, 24));
-    LinearLayout wording = new LinearLayout(this); wording.setOrientation(LinearLayout.VERTICAL);
-    wording.addView(label("自动更新", 18, ink));
-    TextView detail=label("每天首次打开时检查并下载，安装需系统授权", 13, muted);
-    detail.setPadding(0,dp(4),dp(8),0); wording.addView(detail);
+    LinearLayout wording = new LinearLayout(this);
+    wording.addView(helpTitle("自动更新",18,ink,"开启后，每天首次进入应用时检查并下载更新，当天最多自动检查一次。连接失败不会弹出警告；手动检查不受每日次数限制，并会显示结果。安装可能需要系统授权与确认。"),new LinearLayout.LayoutParams(-2,-2));
     update.addView(wording,new LinearLayout.LayoutParams(0,-2,1));
     Switch autoUpdate=new Switch(this); autoUpdate.setContentDescription("自动更新");
     autoUpdate.setChecked(AppUpdates.enabled(this));
@@ -850,7 +861,8 @@ public final class MainActivity extends Activity {
   }
 
   EditText field(LinearLayout box, String title, String value, boolean secret) {
-    box.addView(label(title, 12, muted));
+    if (title.equals("API Key")) box.addView(helpTitle(title,12,muted,"更改自动保存。密钥通过 Android Keystore 加密保存在此设备，默认隐藏；点击眼睛图标可切换显示。"),new LinearLayout.LayoutParams(-2,-2));
+    else box.addView(label(title, 12, muted));
     EditText edit = new EditText(this);
     edit.setTextSize(14);
     edit.setSingleLine(true);
