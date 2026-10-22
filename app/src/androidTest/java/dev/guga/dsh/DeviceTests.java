@@ -174,6 +174,11 @@ public class DeviceTests {
     instrumentation.runOnMainSync(() -> {
       activity.settings();
       android.view.View settings = activity.currentPage;
+      assertFalse(containsText(settings, "检查更新"));
+      activity.updateSettings();
+      assertTrue(containsText(activity.currentPage,"检查更新"));
+      activity.onBackPressed();
+      assertSame(settings,activity.currentPage);
       activity.modelSettings(false);
       assertTrue(containsText(activity.currentPage, "每轮最多步骤"));
       assertEquals(2, activity.pageHistory.size());

@@ -120,3 +120,6 @@ API Key 输入框以等长密码圆点显示已保存密钥，移除已保存提
 签名配置放在 `/opt/dsh-android/signing/signing.properties`，包含 `storeFile`、`storePassword`、`keyAlias`、`keyPassword`；请使用自己的密钥，勿提交到仓库。自行签名的构建不能覆盖官方仓库里不同签名的安装包。
 
 增加 `app/build.gradle` 中的 versionCode/versionName，构建 `:app:assembleRelease`，运行 `python3 scripts/package-release.py`。将生成的 APK、`latest.json`、`SHA256SUMS` 一起上传到对应 `v版本号` 的正式 GitHub Release。发布前确保 APK 使用相同发布签名；不要将测试 APK 放到正式更新清单。
+
+### 0.5.1
+设置首页只保留“应用更新”入口；当前版本、自动更新开关、手动检查和已下载更新安装统一放在独立页面，返回回到设置。

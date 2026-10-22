@@ -714,7 +714,19 @@ public final class MainActivity extends Activity {
       true, false, v -> navigation(true));
     settingEntry(entries, R.drawable.ic_folder, "文件库", "管理导入资料和生成的文件",
       false, true, v -> files());
-    settingSection(entries, "应用更新");
+    settingSection(entries, "应用");
+    settingEntry(entries, R.drawable.ic_refresh, "应用更新", "自动更新与版本检查",
+      true, true, v -> updateSettings());
+    showPage("设置", entries);
+  }
+
+  void updateSettings() {
+    LinearLayout entries = new LinearLayout(this);
+    entries.setOrientation(LinearLayout.VERTICAL);
+    entries.setPadding(dp(4), dp(12), dp(4), dp(20));
+    String version="";
+    try { version=getPackageManager().getPackageInfo(getPackageName(),0).versionName; } catch (Exception ignored) {}
+    settingSection(entries, "当前版本 " + version);
     LinearLayout update = row();
     update.setPadding(dp(16), dp(16), dp(16), dp(16));
     update.setBackground(shape(UiStyle.SURFACE, 24));
@@ -747,7 +759,7 @@ public final class MainActivity extends Activity {
     });
     addAction(entries,checkUpdate,false);
     addAction(entries,installUpdate,false);
-    showPage("设置", entries);
+    showPage("应用更新", entries);
   }
 
   void modelSettings() { modelSettings(false); }
