@@ -116,7 +116,7 @@ export class AndroidAdapter extends LlmAdapter {
           yield {
             type: "tool-call-delta",
             index,
-            ...(t.id ? { id: ToolCallId(t.id) } : {}),
+            id: ToolCallId(current.id),
             ...(t.function?.name ? { name: t.function.name } : {}),
             argumentsDelta: t.function?.arguments || "",
           };

@@ -31,7 +31,8 @@ public final class MainActivity extends Activity {
   final Map<Dialog, Runnable> dialogCleanup = new HashMap<>();
   final ExecutorService io = Executors.newSingleThreadExecutor();
   final Handler handler = new Handler(Looper.getMainLooper());
-  LinearLayout chatRoot;
+  LinearLayout chatRoot, composer;
+  MessageActions messageActions;
   boolean settingsPage;
   final ArrayDeque<View> pageHistory = new ArrayDeque<>();
   final Map<View, Runnable> pageCleanup = new HashMap<>();
@@ -46,6 +47,8 @@ public final class MainActivity extends Activity {
   ImageButton send;
   TextView chatTitle;
   boolean visible, busy, polling;
+  final Map<String, ChatTurnView> turnViews = new LinkedHashMap<>();
+  TextView turnError;
   long revision = -1;
   String currentId = "",
     exportPath = "";
@@ -83,7 +86,7 @@ public final class MainActivity extends Activity {
           }
         });
       }
-      handler.postDelayed(this, 700);
+      handler.postDelayed(this, busy ? 100 : 700);
     }
   };
 
@@ -157,7 +160,7 @@ public final class MainActivity extends Activity {
     messages.setPadding(dp(4), dp(24), dp(4), dp(16));
     scroll.addView(messages);
     root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
-    LinearLayout composer = new LinearLayout(this);
+    composer = new LinearLayout(this);
     composer.setOrientation(LinearLayout.VERTICAL);
     composer.setPadding(dp(12), dp(8), dp(12), dp(8));
     composer.setBackground(outline(0xFFF1EDF7, 24));
@@ -182,9 +185,11 @@ public final class MainActivity extends Activity {
     controls.addView(send, new LinearLayout.LayoutParams(dp(48), dp(48)));
     composer.addView(controls);
     root.addView(composer);
+    messageActions=new MessageActions(this,root,composer);
     if (saved != null) {
       input.setText(saved.getString("draft", ""));
       exportPath = saved.getString("exportPath", "");
+      messageActions.pendingExport=saved.getString("pendingMarkdown", "");
     }
     if (
       Build.VERSION.SDK_INT >= 33 &&
@@ -200,6 +205,7 @@ public final class MainActivity extends Activity {
   public void onSaveInstanceState(Bundle out) {
     out.putString("draft", input.getText().toString());
     out.putString("exportPath", exportPath);
+    out.putString("pendingMarkdown",messageActions.pendingExport);
     super.onSaveInstanceState(out);
   }
 
@@ -514,7 +520,7 @@ public final class MainActivity extends Activity {
     send.setImageResource(busy ? R.drawable.ic_stop : R.drawable.ic_send);
     send.setContentDescription(busy ? "停止任务" : "发送消息");
     status.setText((busy ? "正在处理 · " : "") + state.optString("model"));
-    if (!changed && next == revision) return;
+    if (!changed && next == revision && !busy) return;
     boolean atBottom =
       scroll.getChildAt(0).getHeight() -
         scroll.getHeight() -
@@ -522,6 +528,11 @@ public final class MainActivity extends Activity {
       dp(100);
     currentId = state.optString("id");
     revision = next;
+    if (state.optJSONArray("turns") != null) {
+      renderTurns(state, changed, atBottom);
+      return;
+    }
+    turnViews.clear(); turnError=null;
     messages.removeAllViews();
     JSONArray events = state.optJSONArray("events");
     boolean any = false;
@@ -582,6 +593,38 @@ public final class MainActivity extends Activity {
     );
   }
 
+  void renderTurns(JSONObject state, boolean changed, boolean atBottom) {
+    JSONArray turns=state.optJSONArray("turns");
+    if(changed || turnViews.size()>turns.length()) {messageActions.clear();messages.removeAllViews(); turnViews.clear(); turnError=null;}
+    chatTitle.setText((turns.length()==0?"新对话":turns.optJSONObject(0).optString("userText","新对话"))+(state.optBoolean("isBranch")?" · 分支":""));
+    Set<String> ids=new HashSet<>();
+    for(int n=0;n<turns.length();n++) {
+      JSONObject turn=turns.optJSONObject(n); if(turn==null) continue;
+      String id=turn.optString("id",String.valueOf(n)); ids.add(id);
+      ChatTurnView view=turnViews.get(id);
+      if(view==null) {view=new ChatTurnView(this);turnViews.put(id,view);messages.addView(view,n,new LinearLayout.LayoutParams(-1,-2));}
+      view.update(turn);
+    }
+    for(String id:new ArrayList<>(turnViews.keySet())) if(!ids.contains(id)) messages.removeView(turnViews.remove(id));
+    String error=state.optString("lastError");
+    if(turnError==null) {turnError=label("",14,UiStyle.DANGER); turnError.setPadding(dp(14),dp(8),dp(14),dp(14));messages.addView(turnError);}
+    ChatTurnView.text(turnError,readableError(error));
+    if(messageActions.active())messageActions.updateForkEnabled();
+    if(turns.length()==0&&!busy) scroll.post(() -> scroll.scrollTo(0,0));
+    else if(atBottom||changed) scroll.post(() -> scroll.scrollTo(0,Math.max(0,messages.getHeight()-scroll.getHeight())));
+  }
+
+  static String readableError(String raw) {
+    if(raw.isEmpty()) return "";
+    try {
+      JSONObject reason=new JSONObject(raw); JSONObject error=reason.optJSONObject("error");
+      String message=error==null?reason.optString("reason",reason.optString("message","")):error.optString("message");
+      if(message.isEmpty()) return "本轮未完成，请重试。";
+      if(message.contains("tool-call-delta")) return "工具调用数据不完整，请重新发送消息。";
+      return "本轮未完成："+message;
+    } catch(JSONException ignored) {return raw;}
+  }
+
   @Override
   public void onBackPressed() {
     if (modelPopup != null && modelPopup.isShowing()) { modelPopup.dismiss(); return; }
@@ -589,6 +632,7 @@ public final class MainActivity extends Activity {
       dialogs.peek().dismiss();
       return;
     }
+    if(messageActions.active() && currentPage==chatRoot) {messageActions.clear();return;}
     if (!pageHistory.isEmpty()) {
       Runnable cleanup = pageCleanup.remove(currentPage);
       if (cleanup != null) cleanup.run();
@@ -987,7 +1031,9 @@ public final class MainActivity extends Activity {
     io.execute(() -> {
       try {
         FileTools tools = new FileTools(this);
-        if (request == IMPORT) {
+        if(request==MessageActions.SAVE_MARKDOWN) {
+          messageActions.saveTo(uri);
+        } else if (request == IMPORT) {
           String name = "导入文件.txt";
           try (
             Cursor c = getContentResolver().query(

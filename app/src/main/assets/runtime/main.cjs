@@ -18373,6 +18373,107 @@ if (!Symbol.asyncDispose) Object.defineProperty(Symbol, "asyncDispose", {
   value: /* @__PURE__ */Symbol.for("nodejs.asyncDispose")
 });
 
+// runtime/presentation.ts
+function presentTurns(events, liveFrames2, busy2) {
+  const turns = [];
+  let turn;
+  let processStart = 0,
+    processTotal = 0;
+  const openProcess = time3 => {
+    if (!processStart) processStart = time3;
+    turn.processActive = true;
+  };
+  const closeProcess = time3 => {
+    if (processStart) processTotal += Math.max(0, time3 - processStart);
+    processStart = 0;
+    turn.processActive = false;
+    turn.processElapsedMs = processTotal;
+  };
+  const chunk = (c, time3, append) => {
+    if (c.type === "reasoning-delta" && c.text) {
+      openProcess(time3);
+      if (append) turn.reasoning += c.text;
+    } else if (c.type === "tool-call-delta") openProcess(time3);else if (c.type === "text-delta" && c.text) {
+      closeProcess(time3);
+      if (append) turn.text += c.text;
+    }
+  };
+  const stream = (records, append = false) => {
+    for (const r of records || []) {
+      if (r.type === "chunk") chunk(r.chunk, r.time, append);else {
+        let time3 = r.time0;
+        const values = r.texts || r.args || [];
+        for (let i = 0; i < values.length; i++) {
+          if (i) time3 += r.dt[i - 1];
+          chunk({
+            type: r.type === "reasoning-chunks" ? "reasoning-delta" : r.type === "text-chunks" ? "text-delta" : "tool-call-delta",
+            text: values[i]
+          }, time3, append);
+        }
+      }
+    }
+  };
+  for (const e of events) {
+    if (e.type === "user/message") {
+      if (turn && processStart) closeProcess(e.time);
+      processStart = 0;
+      processTotal = 0;
+      turn = {
+        id: String(e.seq),
+        userText: (e.data.content || []).filter(b => b.type === "text").map(b => b.text).join("\n"),
+        text: "",
+        reasoning: "",
+        tools: [],
+        busy: false,
+        startedAt: e.time,
+        endedAt: 0,
+        processActive: false,
+        processElapsedMs: 0
+      };
+      turns.push(turn);
+    }
+    if (!turn) continue;
+    if (e.type === "assistant/message") {
+      stream(e.data.stream);
+      for (const b of e.data.message.content || []) {
+        if (b.type === "text") turn.text += b.text;
+        if (b.type === "reasoning") turn.reasoning += (turn.reasoning ? "\n\n" : "") + b.text;
+      }
+    } else if (e.type === "assistant/attempt") {
+      stream(e.data.stream, true);
+    } else if (e.type === "tool/call") {
+      openProcess(e.time);
+      let args = {};
+      try {
+        args = JSON.parse(e.data.arguments);
+      } catch {}
+      const target = args.path || args.url || (Array.isArray(args.queries) ? args.queries.join("\u3001") : "") || args.query || "";
+      turn.tools.push({
+        id: e.data.callId,
+        name: e.data.name,
+        status: "running",
+        detail: String(target).slice(0, 180)
+      });
+    } else if (e.type === "tool/result") {
+      const t = turn.tools.find(t2 => t2.id === e.data.message.toolCallId);
+      if (t) {
+        t.status = e.data.error?.name === "AbortError" || /ABORT|CANCEL/i.test(e.data.error?.code || "") ? "interrupted" : e.data.message.isError ? "error" : "completed";
+      }
+    } else if (e.type === "turn/end") {
+      closeProcess(e.time);
+      turn.endedAt = e.time;
+      for (const t of turn.tools) if (t.status === "running") t.status = "interrupted";
+    }
+  }
+  if (turn) {
+    for (const frame of liveFrames2) chunk(frame.chunk, frame.time, true);
+    turn.busy = busy2;
+    if (busy2 && processStart) turn.processElapsedMs = processTotal + Math.max(0, Date.now() - processStart);
+    if (!busy2 && processStart) closeProcess(turn.endedAt || Date.now());
+  }
+  return turns.slice(-150);
+}
+
 // vendor/harness/vendor/cosmokit/src/misc.ts
 function isNullable(value) {
   return value === null || value === void 0;
@@ -49529,9 +49630,7 @@ var AndroidAdapter = class extends LlmAdapter {
           yield {
             type: "tool-call-delta",
             index,
-            ...(t.id ? {
-              id: ToolCallId(t.id)
-            } : {}),
+            id: ToolCallId(current.id),
             ...(t.function?.name ? {
               name: t.function.name
             } : {}),
@@ -49601,6 +49700,7 @@ var lastError = "";
 var revision = 0;
 var steps = 0;
 var agents = /* @__PURE__ */new Map();
+var liveFrames = [];
 async function bridge(route, body = {}, signal, raw = false) {
   const response = await fetch(`http://127.0.0.1:${bridgePort}${route}`, {
     method: "POST",
@@ -49739,14 +49839,17 @@ async function main() {
     frame
   }) => {
     if (frame.type === "start") {
+      liveFrames = [];
       live = "";
       liveReasoning = "";
     }
     if (frame.type === "chunk") {
+      liveFrames.push(frame);
       if (frame.chunk.type === "text-delta") live += frame.chunk.text;
       if (frame.chunk.type === "reasoning-delta") liveReasoning += frame.chunk.text;
     }
     if (frame.type === "end") {
+      liveFrames = [];
       live = "";
       liveReasoning = "";
     }
@@ -49811,6 +49914,8 @@ async function main() {
         case "/state":
           out = {
             id: active.session.id,
+            isBranch: !!active.session.header.parentSession,
+            turns: presentTurns(active.session.snapshotEvents(), liveFrames, busy),
             busy,
             live,
             liveReasoning,
@@ -49833,13 +49938,54 @@ async function main() {
               if (!first) return null;
               return {
                 id: s.header.id,
-                title: first?.data.content?.find(b => b.type === "text")?.text?.slice(0, 45) || "\u65B0\u5BF9\u8BDD",
+                title: (first?.data.content?.find(b => b.type === "text")?.text?.slice(0, 45) || "\u65B0\u5BF9\u8BDD") + (s.header.parentSession ? " \xB7 \u5206\u652F" : ""),
+                isBranch: !!s.header.parentSession,
                 createdAt: s.header.createdAt,
                 archived: d.archived === true
               };
             }).filter(s => s !== null && s.archived === (data.archived === true)).sort((a, b) => b.createdAt - a.createdAt)
           };
           break;
+        case "/session/fork":
+          {
+            if (busy) throw Error("\u8BF7\u5148\u505C\u6B62\u5F53\u524D\u4EFB\u52A1\uFF0C\u518D\u521B\u5EFA\u5206\u652F");
+            if (typeof data.turnId !== "string" || typeof data.includeAssistant !== "boolean") throw Error("\u5206\u652F\u6D88\u606F\u65E0\u6548");
+            const source = active.session;
+            const events = source.snapshotEvents();
+            const index = events.findIndex(e => e.type === "user/message" && String(e.seq) === data.turnId);
+            if (index < 0) throw Error("\u627E\u4E0D\u5230\u8981\u521B\u5EFA\u5206\u652F\u7684\u6D88\u606F");
+            let boundary = index;
+            if (data.includeAssistant) {
+              boundary = -1;
+              for (let i = index + 1; i < events.length; i++) {
+                if (events[i].type === "user/message") break;
+                if (events[i].type === "turn/end") {
+                  boundary = i;
+                  break;
+                }
+              }
+              if (boundary < 0) throw Error("\u8BF7\u7B49\u5F85\u8FD9\u6761\u56DE\u590D\u5B8C\u6210\u540E\u518D\u521B\u5EFA\u5206\u652F");
+            }
+            settings = await bridge("/settings");
+            const id = import_node_crypto3.default.randomUUID();
+            const handle = await ctx.agents.create({
+              sessionId: SessionId(id),
+              seed: buildForkSeed(events, SessionSeq(boundary)),
+              inheritedEventCount: SessionLogOffset(boundary + 1),
+              meta: {
+                parentSession: source.id,
+                isSeeded: true
+              },
+              agentOptions: {
+                provider: "android",
+                model: settings.model,
+                maxTokens: 8192
+              }
+            });
+            agents.set(id, handle.agent);
+            out = await select(id);
+            break;
+          }
         case "/session/archive":
           {
             if (busy) throw Error("\u8BF7\u5148\u505C\u6B62\u5F53\u524D\u4EFB\u52A1\uFF0C\u518D\u7BA1\u7406\u5BF9\u8BDD");

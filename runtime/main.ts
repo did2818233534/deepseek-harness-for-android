@@ -1,7 +1,8 @@
 import "./polyfills.ts";
+import { presentTurns } from "./presentation.ts";
 import { Context } from "@deepseek-ai/cordis";
 import LlmRuntime, { createUserMessage } from "@deepseek-ai/dsh-llm";
-import SessionStore, { SessionId } from "@deepseek-ai/dsh-session";
+import SessionStore, { SessionId, SessionSeq, SessionLogOffset, buildForkSeed } from "@deepseek-ai/dsh-session";
 import SessionProjection from "@deepseek-ai/dsh-session-projection";
 import SystemPrompt from "@deepseek-ai/dsh-system-prompt";
 import Tools, { defineTool } from "@deepseek-ai/dsh-tools";
@@ -31,6 +32,7 @@ let settings: any = {},
   revision = 0,
   steps = 0;
 const agents = new Map();
+let liveFrames: any[] = [];
 async function bridge(route, body = {}, signal?, raw = false) {
   const response = await fetch(`http://127.0.0.1:${bridgePort}${route}`, {
     method: "POST",
@@ -162,15 +164,18 @@ async function main() {
   });
   ctx.on("agent/assistant-stream", ({ frame }) => {
     if (frame.type === "start") {
+      liveFrames = [];
       live = "";
       liveReasoning = "";
     }
     if (frame.type === "chunk") {
+      liveFrames.push(frame);
       if (frame.chunk.type === "text-delta") live += frame.chunk.text;
       if (frame.chunk.type === "reasoning-delta")
         liveReasoning += frame.chunk.text;
     }
     if (frame.type === "end") {
+      liveFrames = [];
       live = "";
       liveReasoning = "";
     }
@@ -238,6 +243,8 @@ async function main() {
         case "/state":
           out = {
             id: active.session.id,
+            isBranch: !!active.session.header.parentSession,
+            turns: presentTurns(active.session.snapshotEvents(), liveFrames, busy),
             busy,
             live,
             liveReasoning,
@@ -275,9 +282,10 @@ async function main() {
                 return {
                   id: s.header.id,
                   title:
-                    first?.data.content
+                    (first?.data.content
                       ?.find((b) => b.type === "text")
-                      ?.text?.slice(0, 45) || "新对话",
+                      ?.text?.slice(0, 45) || "新对话") + (s.header.parentSession ? " · 分支" : ""),
+                  isBranch: !!s.header.parentSession,
                   createdAt: s.header.createdAt,
                   archived: d.archived === true,
                 };
@@ -286,6 +294,36 @@ async function main() {
               .sort((a, b) => b.createdAt - a.createdAt),
           };
           break;
+        case "/session/fork": {
+          if (busy) throw Error("请先停止当前任务，再创建分支");
+          if (typeof data.turnId !== 'string' || typeof data.includeAssistant !== 'boolean')
+            throw Error("分支消息无效");
+          const source = active.session;
+          const events = source.snapshotEvents();
+          const index = events.findIndex(e => e.type === 'user/message' && String(e.seq) === data.turnId);
+          if (index < 0) throw Error("找不到要创建分支的消息");
+          let boundary = index;
+          if (data.includeAssistant) {
+            boundary = -1;
+            for (let i = index + 1; i < events.length; i++) {
+              if (events[i].type === 'user/message') break;
+              if (events[i].type === 'turn/end') { boundary = i; break; }
+            }
+            if (boundary < 0) throw Error("请等待这条回复完成后再创建分支");
+          }
+          settings = await bridge('/settings');
+          const id = crypto.randomUUID();
+          const handle = await ctx.agents.create({
+            sessionId: SessionId(id),
+            seed: buildForkSeed(events, SessionSeq(boundary)),
+            inheritedEventCount: SessionLogOffset(boundary + 1),
+            meta: {parentSession: source.id, isSeeded: true},
+            agentOptions: {provider: 'android', model: settings.model, maxTokens: 8192},
+          });
+          agents.set(id, handle.agent);
+          out = await select(id);
+          break;
+        }
         case "/session/archive": {
           if (busy) throw Error("请先停止当前任务，再管理对话");
           if (typeof data.archived !== 'boolean') throw Error("归档状态无效");

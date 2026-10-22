@@ -52,6 +52,13 @@ final class NativeBridge extends NanoHTTPD {
   }
 
   @Override
+  protected boolean useGzipWhenAccepted(Response response) {
+    // NanoHTTPD's gzip stream buffers SSE until finish; the local bridge must
+    // forward each event immediately even when fetch advertises gzip support.
+    return !response.getMimeType().startsWith("text/event-stream") && super.useGzipWhenAccepted(response);
+  }
+
+  @Override
   public Response serve(IHTTPSession session) {
     if (
       !("Bearer " + token).equals(session.getHeaders().get("authorization"))
