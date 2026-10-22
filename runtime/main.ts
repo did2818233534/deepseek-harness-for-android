@@ -35,7 +35,7 @@ async function bridge(route, body = {}, signal?, raw = false) {
   const response = await fetch(`http://127.0.0.1:${bridgePort}${route}`, {
     method: "POST",
     headers: {
-      "content-type": "application/json",
+      "content-type": "application/json; charset=utf-8",
       authorization: "Bearer " + token,
     },
     body: JSON.stringify(body),
@@ -223,11 +223,15 @@ async function main() {
       return;
     }
     try {
-      let body = "";
+      // Decode only after joining bytes: a TCP chunk can split any UTF-8 character.
+      const chunks: Buffer[] = [];
+      let bytes = 0;
       for await (const b of req) {
-        body += b;
-        if (body.length > 2_000_000) throw Error("Request too large");
+        bytes += b.length;
+        if (bytes > 2_000_000) throw Error("Request too large");
+        chunks.push(b);
       }
+      const body = Buffer.concat(chunks).toString("utf8");
       const data = body ? JSON.parse(body) : {};
       let out;
       switch (req.url) {

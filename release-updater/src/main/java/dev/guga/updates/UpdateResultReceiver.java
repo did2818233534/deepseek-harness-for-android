@@ -1,4 +1,4 @@
-package dev.guga.dsh;
+package dev.guga.updates;
 import android.content.*;
 import android.content.pm.PackageInstaller;
 public final class UpdateResultReceiver extends BroadcastReceiver {

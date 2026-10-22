@@ -1,4 +1,4 @@
-package dev.guga.dsh;
+package dev.guga.updates;
 
 import android.app.*;
 import android.content.*;
@@ -12,8 +12,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.json.*;
 
 final class AppUpdates {
-  static final String REPO = "https://github.com/did2818233534/deepseek-harness-for-android";
-  static final String MANIFEST = REPO + "/releases/latest/download/latest.json";
   static final int NOTICE = 50202;
   static final long MAX_APK = 200 * 1024 * 1024L;
   static final AtomicBoolean running = new AtomicBoolean();
@@ -41,9 +39,9 @@ final class AppUpdates {
         int session=prefs(c).getInt("session",-1);
         if (session>=0) try { c.getPackageManager().getPackageInstaller().abandonSession(session); } catch (Exception ignored) {}
         prefs(c).edit().remove("session").apply();
-      }, "DSH-update-abandon").start();
+      }, "release-update-abandon").start();
       okhttp3.OkHttpClient client = activeClient;
-      if (client != null) new Thread(() -> client.dispatcher().cancelAll(), "DSH-update-cancel").start();
+      if (client != null) new Thread(() -> client.dispatcher().cancelAll(), "release-update-cancel").start();
       c.getSystemService(NotificationManager.class).cancel(NOTICE);
     } else {
       checkAsync(c, false, null);
@@ -81,7 +79,7 @@ final class AppUpdates {
         }
         if (finished != null) finished.run();
       }
-    }, "DSH-update-check").start();
+    }, "release-update-check").start();
   }
   static final class Release {
     final long version, size;
@@ -90,7 +88,7 @@ final class AppUpdates {
       this.version=version; this.size=size; this.url=url; this.sha=sha; this.name=name;
     }
   }
-  static Release parse(String text, long installed, String[] abis) throws Exception {
+  static Release parse(String text, long installed, String[] abis, String repository) throws Exception {
     JSONObject root = new JSONObject(text);
     if (root.optInt("schema") != 1 || root.optBoolean("prerelease")) throw new IOException("Unsupported release");
     long version = root.getLong("versionCode");
@@ -98,10 +96,11 @@ final class AppUpdates {
     JSONObject assets = root.getJSONObject("assets");
     JSONObject asset = null;
     for (String abi : abis) if (assets.optJSONObject(abi) != null) { asset = assets.getJSONObject(abi); break; }
+    if (asset == null) asset = assets.optJSONObject("universal");
     if (asset == null) throw new IOException("Unsupported ABI");
     String url=asset.getString("url"), sha=asset.getString("sha256");
     long size=asset.getLong("size");
-    if (!url.startsWith(REPO + "/releases/download/") || !url.endsWith(".apk") ||
+    if (!url.startsWith(repository + "/releases/download/") || !url.endsWith(".apk") ||
         !sha.matches("[a-fA-F0-9]{64}") || size <= 0 || size > MAX_APK) throw new IOException("Invalid release");
     return new Release(version, size, url, sha, root.getString("versionName"));
   }
@@ -124,7 +123,7 @@ final class AppUpdates {
   }
   static void check(Context c, boolean manual, okhttp3.OkHttpClient client, PackageInfo installed) throws Exception {
     Release release;
-    okhttp3.Call manifestCall=client.newCall(new okhttp3.Request.Builder().url(MANIFEST).build());
+    okhttp3.Call manifestCall=client.newCall(new okhttp3.Request.Builder().url(UpdateConfig.read(c).manifestUrl).build());
     manifestCall.timeout().timeout(30,TimeUnit.SECONDS);
     try (okhttp3.Response r = manifestCall.execute()) {
       if (!r.isSuccessful() || r.body() == null) throw new UpdateFailure("GitHub 请求失败（HTTP " + r.code() + "），请重试");
@@ -136,7 +135,7 @@ final class AppUpdates {
       }
       byte[] bytes = manifest.toByteArray();
       if (bytes.length > 1024 * 1024) throw new UpdateFailure("更新清单过大，已停止检查");
-      release = parse(new String(bytes, java.nio.charset.StandardCharsets.UTF_8), installed.getLongVersionCode(), Build.SUPPORTED_ABIS);
+      release = parse(new String(bytes, java.nio.charset.StandardCharsets.UTF_8), installed.getLongVersionCode(), Build.SUPPORTED_ABIS, UpdateConfig.read(c).repository);
     }
     if (release == null) {
       status="当前已是最新版本";
@@ -221,7 +220,7 @@ final class AppUpdates {
         while ((n=in.read(buffer))!=-1) { out.write(buffer,0,n); }
         session.fsync(out);
       }
-      Intent result=new Intent(c, UpdateResultReceiver.class).setAction("dev.guga.dsh.UPDATE_RESULT");
+      Intent result=new Intent(c, UpdateResultReceiver.class).setAction(c.getPackageName()+".RELEASE_UPDATE_RESULT");
       PendingIntent callback=PendingIntent.getBroadcast(c,id,result,PendingIntent.FLAG_UPDATE_CURRENT |
         (Build.VERSION.SDK_INT >= 31 ? PendingIntent.FLAG_MUTABLE : 0));
       prefs(c).edit().putInt("session",id).apply();
@@ -236,8 +235,8 @@ final class AppUpdates {
     if (confirmation != null) open.putExtra("confirmation",confirmation);
     PendingIntent pending=PendingIntent.getActivity(c,NOTICE,open,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
     try {
-      manager.notify(NOTICE,new Notification.Builder(c,"updates").setSmallIcon(R.drawable.ic_notification)
-        .setContentTitle("DSH Pocket " + version + " 已下载")
+      manager.notify(NOTICE,new Notification.Builder(c,"updates").setSmallIcon(UpdateConfig.read(c).notificationIcon)
+        .setContentTitle(UpdateConfig.read(c).appName + " " + version + " 已下载")
         .setContentText("点此完成系统安装确认").setContentIntent(pending).setAutoCancel(true).build());
     } catch (SecurityException ignored) {}
   }

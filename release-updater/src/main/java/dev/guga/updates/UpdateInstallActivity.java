@@ -1,4 +1,4 @@
-package dev.guga.dsh;
+package dev.guga.updates;
 
 import android.app.*;
 import android.content.*;
@@ -15,11 +15,11 @@ public final class UpdateInstallActivity extends Activity {
   public void onCreate(Bundle saved) {
     super.onCreate(saved);
     foreground=new WeakReference<>(this);
-    UiStyle ui=new UiStyle(this);
+    UpdateStyle ui=new UpdateStyle(this);
     LinearLayout panel=new LinearLayout(this); panel.setOrientation(LinearLayout.VERTICAL);
-    panel.setPadding(ui.dp(24),ui.dp(24),ui.dp(24),ui.dp(24)); panel.setBackground(ui.shape(UiStyle.BACKGROUND,28));
-    TextView title=new TextView(this); title.setText("安装更新"); title.setTextSize(22); title.setTextColor(UiStyle.INK); panel.addView(title);
-    TextView detail=new TextView(this); detail.setText("正在准备系统安装确认…"); detail.setTextSize(15); detail.setTextColor(UiStyle.MUTED); detail.setPadding(0,ui.dp(16),0,ui.dp(8)); panel.addView(detail);
+    panel.setPadding(ui.dp(24),ui.dp(24),ui.dp(24),ui.dp(24)); panel.setBackground(ui.shape(UpdateStyle.BACKGROUND,28));
+    TextView title=new TextView(this); title.setText("安装更新"); title.setTextSize(22); title.setTextColor(UpdateStyle.INK); panel.addView(title);
+    TextView detail=new TextView(this); detail.setText("正在准备系统安装确认…"); detail.setTextSize(15); detail.setTextColor(UpdateStyle.MUTED); detail.setPadding(0,ui.dp(16),0,ui.dp(8)); panel.addView(detail);
     setContentView(panel); getWindow().setBackgroundDrawableResource(android.R.color.transparent);
     getWindow().setLayout(Math.min(getResources().getDisplayMetrics().widthPixels-ui.dp(48),ui.dp(420)),-2);
     installing=saved!=null && saved.getBoolean("installing");
@@ -32,7 +32,7 @@ public final class UpdateInstallActivity extends Activity {
     if (!getPackageManager().canRequestPackageInstalls()) {
       try { startActivityForResult(new Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
         Uri.parse("package:"+getPackageName())),1); }
-      catch(Exception e) { showFailure("无法打开安装权限设置，请在系统设置中允许 DSH Pocket 安装应用。"); }
+      catch(Exception e) { showFailure("无法打开安装权限设置，请在系统设置中允许此应用安装更新。"); }
     } else install();
   }
   void install() {
@@ -42,7 +42,7 @@ public final class UpdateInstallActivity extends Activity {
       try { AppUpdates.install(getApplicationContext(),true); }
       catch (Exception e) { runOnUiThread(() -> { installing=false; showFailure(AppUpdates.failure(e)); }); }
       // Keep this foreground Activity alive until PackageInstaller returns its confirmation.
-    },"DSH-install").start();
+    },"release-update-install").start();
   }
   void confirm(Intent confirmation) {
     if(confirmation==null) { showFailure("系统未提供安装确认界面，请重试。"); return; }
@@ -74,7 +74,7 @@ public final class UpdateInstallActivity extends Activity {
     errorDialog=new AlertDialog.Builder(this).setTitle("未完成安装").setMessage(message)
       .setNegativeButton("取消",(d,w)->finish()).setPositiveButton("重试",(d,w)->begin()).create();
     errorDialog.setOnCancelListener(d->finish()); errorDialog.show();
-    UiStyle ui=new UiStyle(this); errorDialog.getWindow().setBackgroundDrawable(ui.shape(UiStyle.BACKGROUND,28));
+    UpdateStyle ui=new UpdateStyle(this); errorDialog.getWindow().setBackgroundDrawable(ui.shape(UpdateStyle.BACKGROUND,28));
     ui.dialogAction(errorDialog.getButton(AlertDialog.BUTTON_NEGATIVE),false);
     ui.dialogAction(errorDialog.getButton(AlertDialog.BUTTON_POSITIVE),false);
   }

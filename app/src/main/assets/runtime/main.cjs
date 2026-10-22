@@ -49605,7 +49605,7 @@ async function bridge(route, body = {}, signal, raw = false) {
   const response = await fetch(`http://127.0.0.1:${bridgePort}${route}`, {
     method: "POST",
     headers: {
-      "content-type": "application/json",
+      "content-type": "application/json; charset=utf-8",
       authorization: "Bearer " + token
     },
     body: JSON.stringify(body),
@@ -49797,11 +49797,14 @@ async function main() {
       return;
     }
     try {
-      let body = "";
+      const chunks = [];
+      let bytes = 0;
       for await (const b of req) {
-        body += b;
-        if (body.length > 2e6) throw Error("Request too large");
+        bytes += b.length;
+        if (bytes > 2e6) throw Error("Request too large");
+        chunks.push(b);
       }
+      const body = Buffer.concat(chunks).toString("utf8");
       const data = body ? JSON.parse(body) : {};
       let out;
       switch (req.url) {

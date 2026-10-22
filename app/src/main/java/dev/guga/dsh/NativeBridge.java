@@ -69,6 +69,9 @@ final class NativeBridge extends NanoHTTPD {
         "请求过大"
       );
       Map<String, String> body = new HashMap<>();
+      // All bridge payloads are UTF-8 JSON. NanoHTTPD otherwise defaults a
+      // charset-less Content-Type to US-ASCII and replaces every Chinese byte.
+      session.getHeaders().put("content-type", "application/json; charset=utf-8");
       session.parseBody(body);
       JSONObject input = new JSONObject(body.getOrDefault("postData", "{}"));
       switch (session.getUri()) {

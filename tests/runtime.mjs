@@ -14,6 +14,7 @@ let child,
   calls = 0;
 const bridge = http.createServer(async (req, res) => {
   assert.equal(req.headers.authorization, "Bearer " + token);
+  req.setEncoding("utf8");
   let raw = "";
   for await (const b of req) raw += b;
   const b = JSON.parse(raw);
@@ -134,6 +135,21 @@ async function api(route, data = {}) {
   assert.equal(r.status, 200, JSON.stringify(b));
   return b;
 }
+async function fragmentedSend(text) {
+  const port = Number(fs.readFileSync(path.join(root, "runtime-port"), "utf8"));
+  const body = Buffer.from(JSON.stringify({text}));
+  await new Promise((resolve, reject) => {
+    const req = http.request({hostname:'127.0.0.1', port, path:'/send', method:'POST',
+      headers:{authorization:'Bearer '+token, 'content-type':'application/json; charset=utf-8', 'content-length':body.length}}, res => {
+        res.resume(); res.on('end', () => res.statusCode === 200 ? resolve() : reject(Error('Fragmented send failed')));
+      });
+    req.on('error', reject);
+    void (async () => {
+      for (const byte of body) { req.write(Buffer.from([byte])); await new Promise(r => setTimeout(r, 2)); }
+      req.end();
+    })().catch(reject);
+  });
+}
 async function stop() {
   if (child && child.exitCode === null) {
     child.kill("SIGTERM");
@@ -196,6 +212,11 @@ try {
   await api('/send', {text:'Tools available again'});
   await until(async () => !(await api('/state')).busy);
   assert(requests.at(-1).tools.some(t => t.function.name === 'web_search'), 'tools re-register');
+  mode = "text";
+  const outboundUnicode = '你的知识库截止到什么时间？中文👋😀 café 𠮷';
+  await fragmentedSend(outboundUnicode);
+  await until(async () => !(await api('/state')).busy);
+  assert(requests.at(-1).messages.some(m => m.role === 'user' && m.content === outboundUnicode), 'byte-split outgoing Unicode remains exact');
   mode = "unicode";
   await api('/send', {text:'UTF-8 stream split test'});
   await until(async () => !(await api('/state')).busy);

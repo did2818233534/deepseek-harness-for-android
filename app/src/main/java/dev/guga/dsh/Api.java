@@ -27,7 +27,7 @@ final class Api {
       .url("http://127.0.0.1:" + port + route)
       .header("Authorization", "Bearer " + HarnessService.token)
       .post(
-        RequestBody.create(body.toString(), MediaType.get("application/json"))
+        RequestBody.create(body.toString(), MediaType.get("application/json; charset=utf-8"))
       )
       .build();
     try (Response response = client.newCall(r).execute()) {

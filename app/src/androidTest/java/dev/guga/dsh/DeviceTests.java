@@ -14,7 +14,7 @@ import org.junit.Test;
 
 public class DeviceTests {
   @org.junit.Before public void preventExternalUpdateChecks() {
-    AppUpdates.prefs(getContext()).edit().putString("checkedDay",AppUpdates.today()).commit();
+    dev.guga.updates.UpdateTestDriver.prefs(getContext()).edit().putString("checkedDay",dev.guga.updates.UpdateTestDriver.today()).commit();
   }
   @Test
   public void testSecretVisibilityKeepsValueAndSelection() throws Exception {
@@ -135,6 +135,7 @@ public class DeviceTests {
       android.graphics.Bitmap shot=instrumentation.getUiAutomation().takeScreenshot();
       shot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,image); shot.recycle();
     }
+    waitForDialogFocus(activity);
     instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
     instrumentation.waitForIdleSync();
     instrumentation.runOnMainSync(() -> {
@@ -142,6 +143,7 @@ public class DeviceTests {
       assertTrue(activity.dialogs.peek().isShowing());
       assertFalse(activity.isFinishing());
     });
+    waitForDialogFocus(activity);
     instrumentation.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_BACK);
     instrumentation.waitForIdleSync();
     instrumentation.runOnMainSync(() -> {
@@ -152,6 +154,19 @@ public class DeviceTests {
       assertTrue(spacing.topMargin > 0 && spacing.bottomMargin > 0);
       activity.finish();
     });
+  }
+
+  static void waitForDialogFocus(MainActivity activity) throws Exception {
+    android.app.Instrumentation i = InstrumentationRegistry.getInstrumentation();
+    long deadline = android.os.SystemClock.elapsedRealtime() + 3000;
+    java.util.concurrent.atomic.AtomicBoolean focused = new java.util.concurrent.atomic.AtomicBoolean();
+    do {
+      i.runOnMainSync(() -> focused.set(!activity.dialogs.isEmpty()
+        && activity.dialogs.peek().getWindow().getDecorView().hasWindowFocus()));
+      if (focused.get()) return;
+      Thread.sleep(25);
+    } while (android.os.SystemClock.elapsedRealtime() < deadline);
+    fail("Dialog did not receive window focus");
   }
 
   static boolean containsText(android.view.View view, String text) {
@@ -379,6 +394,8 @@ public class DeviceTests {
     // Intercept only in-process instrumentation; never sends a test key to a remote endpoint.
     OkHttpClient original = bridge.api;
     AtomicInteger requests = new AtomicInteger();
+    String userText = "你的知识库截止到什么时间？中文👋😀 café 𠮷";
+    String fileText = "安卓原生文件内容：中文👋😀 café 𠮷";
     String output = "device-test-" + System.nanoTime() + ".txt";
     bridge.api = new OkHttpClient.Builder()
       .addInterceptor(chain -> {
@@ -387,6 +404,13 @@ public class DeviceTests {
           okio.Buffer requestBody = new okio.Buffer();
           chain.request().body().writeTo(requestBody);
           JSONObject req = new JSONObject(requestBody.readUtf8());
+          JSONArray messages = req.getJSONArray("messages");
+          boolean exactUser = false;
+          for (int j = 0; j < messages.length(); j++) {
+            JSONObject message = messages.getJSONObject(j);
+            if ("user".equals(message.optString("role")) && userText.equals(message.optString("content"))) exactUser = true;
+          }
+          if (!exactUser || req.toString().contains("\uFFFD")) throw new IOException("Outbound Unicode corrupted");
           JSONObject delta = new JSONObject();
           if (n == 0) {
             JSONObject fn = new JSONObject()
@@ -395,7 +419,7 @@ public class DeviceTests {
                 "arguments",
                 new JSONObject()
                   .put("path", output)
-                  .put("content", "Android native file tool passed")
+                  .put("content", fileText)
                   .toString()
               );
             delta.put(
@@ -461,7 +485,7 @@ public class DeviceTests {
         32
       );
       Api.call("/select", new JSONObject());
-      Api.call("/send", new JSONObject().put("text", "请创建测试文件"));
+      Api.call("/send", new JSONObject().put("text", userText));
       JSONObject state = null;
       deadline = System.currentTimeMillis() + 20000;
       do {
@@ -477,7 +501,7 @@ public class DeviceTests {
         new FileTools(getContext())
           .read(new JSONObject().put("path", output))
           .getString("text")
-          .contains("passed")
+          .equals(fileText)
       );
       assertTrue(
         "assistant text: " + state,
@@ -485,6 +509,19 @@ public class DeviceTests {
       );
       assertTrue("UTF-8 survives byte-split native bridge", state.toString().contains("中文👋😀 café 𠮷"));
       assertFalse("no replacement characters", state.toString().contains("\uFFFD"));
+      // Older runtime bundles omitted charset. The native bridge must still decode JSON as UTF-8.
+      JSONObject legacyBody = new JSONObject().put("name", "write_file").put("args",
+        new JSONObject().put("path", output).put("content", fileText).put("overwrite", true));
+      Request legacyRequest = new Request.Builder()
+        .url("http://127.0.0.1:" + bridge.getListeningPort() + "/tool")
+        .header("Authorization", "Bearer " + HarnessService.token)
+        .post(RequestBody.create(legacyBody.toString().getBytes(StandardCharsets.UTF_8), MediaType.get("application/json")))
+        .build();
+      try (Response legacyResponse = Api.client.newCall(legacyRequest).execute()) {
+        assertTrue("charset-less internal JSON accepted", legacyResponse.isSuccessful());
+      }
+      assertEquals("native bridge defaults JSON to UTF-8", fileText,
+        new FileTools(getContext()).read(new JSONObject().put("path", output)).getString("text"));
       final JSONObject renderedState = state;
       final MainActivity[] screen = new MainActivity[1];
       InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
