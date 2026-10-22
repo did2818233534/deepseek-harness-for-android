@@ -1,0 +1,25 @@
+.gradle/
+build/
+app/build/
+local.properties
+local-signing.properties
+app/src/main/jniLibs/
+node_modules/
+*.jks
+*.keystore
+
+# Local build artifacts, downloads, credentials and editor state
+dist/
+*.apk
+*.aab
+*.log
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+.idea/
+.vscode/
+.DS_Store
+.externalNativeBuild/
+.cxx/

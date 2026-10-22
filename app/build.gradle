@@ -1,0 +1,22 @@
+plugins { id 'com.android.application' }
+def personalSigning = new Properties()
+def personalSigningFile = file('/opt/dsh-android/signing/signing.properties')
+if (personalSigningFile.exists()) personalSigningFile.withInputStream { personalSigning.load(it) }
+android {
+ splits { abi { enable true; reset(); include 'arm64-v8a', 'x86_64'; universalApk true } }
+ signingConfigs { personal { if (personalSigningFile.exists()) { storeFile file(personalSigning.storeFile); storePassword personalSigning.storePassword; keyAlias personalSigning.keyAlias; keyPassword personalSigning.keyPassword } } }
+ namespace 'dev.guga.dsh'
+ compileSdk 35
+ defaultConfig { applicationId 'dev.guga.dsh'; minSdk 28; targetSdk 35; versionCode 18; versionName '0.5.0'; testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner' }
+ compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+ packaging { jniLibs { useLegacyPackaging true }; resources { excludes += ['META-INF/DEPENDENCIES','META-INF/LICENSE','META-INF/LICENSE.txt','META-INF/NOTICE','META-INF/NOTICE.txt'] } }
+ buildTypes { release { minifyEnabled false; if (personalSigningFile.exists()) signingConfig signingConfigs.personal } }
+}
+dependencies {
+ androidTestImplementation 'androidx.test:runner:1.6.2'
+ androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+ implementation 'org.nanohttpd:nanohttpd:2.3.1'
+ implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+ implementation 'org.jsoup:jsoup:1.18.3'
+ implementation 'com.tom-roush:pdfbox-android:2.0.27.0'
+}
