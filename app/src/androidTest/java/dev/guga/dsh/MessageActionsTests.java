@@ -23,6 +23,11 @@ public class MessageActionsTests {
       assertTrue(a.messageActions.fork.isEnabled());view.user.performClick();assertEquals(2,a.messageActions.selected.size());assertFalse(a.messageActions.fork.isEnabled());
       String markdown=a.messageActions.markdown();assertTrue(markdown.indexOf("## 用户")<markdown.indexOf("## 助手"));
       assertTrue(markdown.contains("**中文答案**"));assertFalse(markdown.contains("不应导出"));
+      view.user.performClick();assertEquals(1,a.messageActions.selected.size());
+      a.messageActions.all.performClick();assertEquals(2,a.messageActions.selected.size());assertEquals("取消全选",a.messageActions.all.getText().toString());
+      a.messageActions.all.performClick();assertEquals(0,a.messageActions.selected.size());assertTrue(a.messageActions.active());assertFalse(a.messageActions.share.isEnabled());
+      a.messageActions.all.performClick();assertEquals(2,a.messageActions.selected.size());
+      assertFalse(view.answer.getText().toString().contains("**中文答案**"));
     });
     StreamingTests.screenshot(c,"message-selection.png");
     i.runOnMainSync(() -> {

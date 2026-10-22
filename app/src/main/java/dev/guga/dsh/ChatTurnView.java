@@ -14,9 +14,11 @@ final class ChatTurnView extends LinearLayout {
   final ImageView chevron;
   boolean expanded, initialized, wasActive;
   String turnId="";
+  final ChatMarkdown markdown;
 
   ChatTurnView(MainActivity host) {
     super(host); this.host=host; setOrientation(VERTICAL);
+    markdown=new ChatMarkdown(host);
     user=bubble(true); addView(user, bubbleParams(true));
     process=new LinearLayout(host); process.setOrientation(VERTICAL);
     LayoutParams processParams=new LayoutParams(-1,-2); processParams.bottomMargin=host.dp(10);
@@ -38,6 +40,7 @@ final class ChatTurnView extends LinearLayout {
     steps=host.label("",13,host.muted); steps.setTextIsSelectable(true); steps.setLineSpacing(host.dp(5),1);
     details.addView(steps,new LayoutParams(-1,-2)); process.addView(details,new LayoutParams(-1,-2));
     answer=bubble(false); addView(answer,bubbleParams(false));
+    ChatMarkdown.links(answer,host);
     user.setOnLongClickListener(v -> {host.messageActions.toggle(turnId+"/u");return true;});
     answer.setOnLongClickListener(v -> {host.messageActions.toggle(turnId+"/a");return true;});
     user.setOnClickListener(v -> {if(host.messageActions.active())host.messageActions.toggle(turnId+"/u");});
@@ -60,7 +63,7 @@ final class ChatTurnView extends LinearLayout {
   }
   void update(JSONObject turn) {
     turnId=turn.optString("id");selection();
-    text(user,turn.optString("userText")); text(answer,turn.optString("text"));
+    text(user,turn.optString("userText")); markdown.update(answer,turn.optString("text"));
     String thought=turn.optString("reasoning"); JSONArray tools=turn.optJSONArray("tools");
     boolean hasTools=tools!=null&&tools.length()>0, hasProcess=!thought.isEmpty()||hasTools;
     boolean active=turn.optBoolean("processActive")&&turn.optBoolean("busy");

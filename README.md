@@ -142,3 +142,5 @@ API Key 输入框以等长密码圆点显示已保存密钥，移除已保存提
 ## 可复用更新模块
 
 `release-updater` 是独立 Android Library，不依赖 Harness 核心或聊天界面。其他 Android 应用可复用每日检查、手动反馈、APK 校验、缓存复用、系统安装和安装后清理；只需配置自己的 GitHub 仓库。提供可选固定尺寸更新按钮，也可通过公开 API 自行实现界面。接入、清单格式及 AAR/Maven 分发说明见 [release-updater/README.md](release-updater/README.md)。
+
+聊天正文支持原生 Markdown 预览（标题、强调、引用、列表、代码块、链接、删除线、任务列表和基础表格），兼容流式输出。分享/保存导出原始 Markdown。消息多选支持全选和取消全选，取消全选后可继续选择。
