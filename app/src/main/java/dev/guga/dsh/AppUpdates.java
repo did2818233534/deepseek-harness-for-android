@@ -18,6 +18,19 @@ final class AppUpdates {
   static final long MAX_APK = 200 * 1024 * 1024L;
   static final AtomicBoolean running = new AtomicBoolean();
   static volatile okhttp3.OkHttpClient activeClient;
+  static volatile String status = "";
+  static String failure(Exception e) {
+    if (e instanceof java.net.UnknownHostException) return "无法解析 GitHub 地址，请检查网络后重试";
+    if (e instanceof java.net.SocketTimeoutException || e instanceof java.io.InterruptedIOException)
+      return "连接或下载超时，请重试";
+    if (e instanceof javax.net.ssl.SSLException) return "无法建立安全连接，请检查网络和系统时间";
+    if (e instanceof org.json.JSONException) return "更新清单格式异常，请稍后重试";
+    if (e instanceof UpdateFailure) return e.getMessage();
+    return "更新失败，请检查网络后重试";
+  }
+  static final class UpdateFailure extends IOException {
+    UpdateFailure(String message) { super(message); }
+  }
   static android.content.SharedPreferences prefs(Context c) { return c.getSharedPreferences("updates", 0); }
   static boolean enabled(Context c) { return prefs(c).getBoolean("enabled", true); }
   static void setEnabled(Context c, boolean value) {
@@ -49,10 +62,11 @@ final class AppUpdates {
         if (!running.compareAndSet(false, true)) return;
         locked = true;
         if (!due(prefs(c).getString("checkedDay", ""), today(), manual, enabled(c))) return;
+        status="正在连接 GitHub…";
         prefs(c).edit().putString("checkedDay", today()).apply();
         check(c, manual);
-      } catch (Exception ignored) {
-        // Offline, GitHub outages, invalid updates and rate limiting never interrupt chat.
+      } catch (Exception error) {
+        status=failure(error); // Only the update page displays this; automatic checks never alert.
       } finally {
         if (locked) {
           okhttp3.OkHttpClient client = activeClient; activeClient = null;
@@ -97,19 +111,22 @@ final class AppUpdates {
   }
   static void check(Context c, boolean manual, okhttp3.OkHttpClient client, PackageInfo installed) throws Exception {
     Release release;
-    try (okhttp3.Response r = client.newCall(new okhttp3.Request.Builder().url(MANIFEST).build()).execute()) {
-      if (!r.isSuccessful() || r.body() == null) return;
+    okhttp3.Call manifestCall=client.newCall(new okhttp3.Request.Builder().url(MANIFEST).build());
+    manifestCall.timeout().timeout(30,TimeUnit.SECONDS);
+    try (okhttp3.Response r = manifestCall.execute()) {
+      if (!r.isSuccessful() || r.body() == null) throw new UpdateFailure("GitHub 请求失败（HTTP " + r.code() + "），请重试");
       ByteArrayOutputStream manifest = new ByteArrayOutputStream();
       InputStream stream = r.body().byteStream(); byte[] block = new byte[8192]; int n;
       while ((n=stream.read(block))!=-1) {
         manifest.write(block,0,n);
-        if (manifest.size()>1024*1024) return;
+        if (manifest.size()>1024*1024) throw new UpdateFailure("更新清单过大，已停止检查");
       }
       byte[] bytes = manifest.toByteArray();
-      if (bytes.length > 1024 * 1024) return;
+      if (bytes.length > 1024 * 1024) throw new UpdateFailure("更新清单过大，已停止检查");
       release = parse(new String(bytes, java.nio.charset.StandardCharsets.UTF_8), installed.getLongVersionCode(), Build.SUPPORTED_ABIS);
     }
     if (release == null) {
+      status="当前已是最新版本";
       prefs(c).edit().putLong("success",System.currentTimeMillis()).apply();
       if (prefs(c).getLong("ready", 0) <= installed.getLongVersionCode()) {
         apk(c).delete(); prefs(c).edit().remove("ready").remove("session").apply();
@@ -121,31 +138,36 @@ final class AppUpdates {
     File target = apk(c); target.getParentFile().mkdirs();
     if (prefs(c).getLong("ready", 0) == release.version && valid(c, target, release.version)) {
       prefs(c).edit().putLong("success",System.currentTimeMillis()).apply();
+      status="新版本 " + release.name + " 已下载，请点击安装";
       notifyReady(c, release.name); return;
     }
+    status="发现新版本 " + release.name + "，正在下载…";
     File partial = new File(target.getParentFile(), "download.part");
     try {
       MessageDigest digest = MessageDigest.getInstance("SHA-256");
       long total = 0;
       try (okhttp3.Response r = client.newCall(new okhttp3.Request.Builder().url(release.url).build()).execute()) {
-        if (!r.isSuccessful() || r.body() == null) return;
+        if (!r.isSuccessful() || r.body() == null) throw new UpdateFailure("GitHub 请求失败（HTTP " + r.code() + "），请重试");
         try (InputStream in = r.body().byteStream(); FileOutputStream out = new FileOutputStream(partial)) {
           byte[] buffer = new byte[32768]; int count;
           while ((count = in.read(buffer)) != -1) {
             if ((!manual && !enabled(c)) || Thread.currentThread().isInterrupted()) throw new IOException("Cancelled");
             total += count; if (total > release.size || total > MAX_APK) throw new IOException("Size mismatch");
             out.write(buffer, 0, count); digest.update(buffer, 0, count);
+            status="正在下载 " + release.name + "：" + (total * 100 / release.size) + "%";
           }
           out.getFD().sync();
         }
       }
+      status="正在校验安装包…";
       if (total != release.size || !hex(digest.digest()).equalsIgnoreCase(release.sha) ||
-          !valid(c, partial, release.version)) return;
+          !valid(c, partial, release.version)) throw new UpdateFailure("安装包校验失败，已丢弃，请重试");
       if (!manual && !enabled(c)) return;
-      if (target.exists() && !target.delete()) return;
-      if (!partial.renameTo(target)) return;
+      if (target.exists() && !target.delete()) throw new UpdateFailure("无法替换下载文件，请检查存储空间");
+      if (!partial.renameTo(target)) throw new UpdateFailure("无法保存安装包，请检查存储空间");
       prefs(c).edit().putLong("success",System.currentTimeMillis()).putLong("ready", release.version).putString("name", release.name).remove("session").apply();
-      if (c.getPackageManager().canRequestPackageInstalls()) install(c);
+      status="新版本 " + release.name + " 已下载，请点击安装";
+      if (!manual && c.getPackageManager().canRequestPackageInstalls()) install(c);
       else notifyReady(c, release.name);
     } finally { partial.delete(); }
   }

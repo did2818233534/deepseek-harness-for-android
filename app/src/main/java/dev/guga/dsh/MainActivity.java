@@ -743,20 +743,28 @@ public final class MainActivity extends Activity {
     Button installUpdate=button("安装已下载的更新",v -> startActivity(new Intent(this,UpdateInstallActivity.class)));
     installUpdate.setVisibility(AppUpdates.prefs(this).getLong("ready",0)>0 && AppUpdates.apk(this).exists() ? View.VISIBLE : View.GONE);
     Button checkUpdate=button("检查更新",null);
+    TextView updateStatus=label("",14,muted);
+    updateStatus.setPadding(dp(16),dp(12),dp(16),dp(8));
+    updateStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+    updateStatus.setVisibility(View.GONE);
     checkUpdate.setOnClickListener(v -> {
-      long started=System.currentTimeMillis();
       checkUpdate.setEnabled(false); checkUpdate.setText("正在检查…");
-      AppUpdates.checkAsync(this,true,() -> runOnUiThread(() -> {
-        if (isFinishing() || isDestroyed()) return;
-        checkUpdate.setEnabled(true); checkUpdate.setText("检查更新");
-        installUpdate.setVisibility(AppUpdates.prefs(this).getLong("ready",0)>0 && AppUpdates.apk(this).exists() ? View.VISIBLE : View.GONE);
-        if (AppUpdates.prefs(this).getLong("success",0)>=started) {
-          if (AppUpdates.prefs(this).getLong("ready",0)>0 && AppUpdates.apk(this).exists())
-            checkUpdate.setText("新版本已下载");
-          else checkUpdate.setText("当前已是最新版本");
-        }
-      }));
+      updateStatus.setVisibility(View.VISIBLE);
+      updateStatus.setText(AppUpdates.running.get() ? "正在检查或下载，请稍候…" : "正在连接 GitHub…");
+      final boolean[] finished={false};
+      AppUpdates.checkAsync(this,true,() -> runOnUiThread(() -> finished[0]=true));
+      Runnable refresh=new Runnable() { public void run() {
+        if (isFinishing() || isDestroyed() || !updateStatus.isAttachedToWindow()) return;
+        if (!AppUpdates.status.isEmpty() && !AppUpdates.status.contentEquals(updateStatus.getText())) updateStatus.setText(AppUpdates.status);
+        boolean ready=AppUpdates.prefs(MainActivity.this).getLong("ready",0)>0 && AppUpdates.apk(MainActivity.this).exists();
+        installUpdate.setVisibility(ready ? View.VISIBLE : View.GONE);
+        if (finished[0] && !AppUpdates.running.get()) {
+          checkUpdate.setEnabled(true); checkUpdate.setText("检查更新");
+        } else handler.postDelayed(this,400);
+      }};
+      handler.postDelayed(refresh,200);
     });
+    entries.addView(updateStatus,new LinearLayout.LayoutParams(-1,-2));
     addAction(entries,checkUpdate,false);
     addAction(entries,installUpdate,false);
     showPage("应用更新", entries);

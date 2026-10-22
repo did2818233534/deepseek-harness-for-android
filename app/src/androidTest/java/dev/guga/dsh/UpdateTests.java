@@ -19,6 +19,27 @@ public class UpdateTests {
     return new JSONObject().put("schema",1).put("versionCode",version).put("versionName","test")
       .put("assets",new JSONObject().put("arm64-v8a",asset).put("x86_64",asset)).toString();
   }
+  @Test public void manualPageShowsExistingCheckAndFailure() throws Exception {
+    Context c=context();
+    AppUpdates.prefs(c).edit().putString("checkedDay",AppUpdates.today()).commit();
+    var i=InstrumentationRegistry.getInstrumentation();
+    MainActivity activity=(MainActivity)i.startActivitySync(new android.content.Intent(c,MainActivity.class).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
+    try {
+      AppUpdates.running.set(true); AppUpdates.status="正在下载 0.5.2：42%";
+      i.runOnMainSync(() -> { activity.settings(); activity.updateSettings(); clickCheck(activity.currentPage); });
+      Thread.sleep(700);
+      i.runOnMainSync(() -> assertTrue(DeviceTests.containsText(activity.currentPage,"42%")));
+      AppUpdates.status=AppUpdates.failure(new java.net.UnknownHostException()); AppUpdates.running.set(false);
+      Thread.sleep(700);
+      i.runOnMainSync(() -> assertTrue(DeviceTests.containsText(activity.currentPage,"无法解析 GitHub")));
+    } finally { AppUpdates.running.set(false); i.runOnMainSync(activity::finish); }
+    assertTrue(AppUpdates.failure(new java.net.SocketTimeoutException()).contains("超时"));
+    assertTrue(AppUpdates.failure(new javax.net.ssl.SSLException("private diagnostic")).contains("安全连接"));
+  }
+  void clickCheck(android.view.View v) {
+    if(v instanceof android.widget.Button && "检查更新".contentEquals(((android.widget.Button)v).getText())) { v.performClick(); return; }
+    if(v instanceof android.view.ViewGroup) { var group=(android.view.ViewGroup)v; for(int n=0;n<group.getChildCount();n++) clickCheck(group.getChildAt(n)); }
+  }
   @Test public void dailyLimitAndManualOverride() {
     assertTrue(AppUpdates.due("", "2026-10-22",false,true));
     assertFalse(AppUpdates.due("2026-10-22", "2026-10-22",false,true));
@@ -57,7 +78,8 @@ public class UpdateTests {
         .body(ResponseBody.create(body,MediaType.get("application/octet-stream"))).build();
     }).build();
     try {
-      AppUpdates.check(c,true,client,installed);
+      try { AppUpdates.check(c,true,client,installed); fail("Invalid APK accepted"); }
+      catch (AppUpdates.UpdateFailure expected) { assertTrue(AppUpdates.failure(expected).contains("校验失败")); }
       assertEquals(2,requests.get()); assertFalse(AppUpdates.apk(c).exists());
       assertEquals(0,AppUpdates.prefs(c).getLong("success",0));
       assertEquals(0,AppUpdates.prefs(c).getLong("ready",0));
@@ -67,7 +89,11 @@ public class UpdateTests {
     OkHttpClient offline=new OkHttpClient.Builder().addInterceptor(chain -> new Response.Builder()
       .request(chain.request()).protocol(Protocol.HTTP_1_1).code(503).message("Unavailable")
       .body(ResponseBody.create("",MediaType.get("text/plain"))).build()).build();
-    try { AppUpdates.check(c,true,offline,installed); assertEquals(0,AppUpdates.prefs(c).getLong("success",0)); }
+    try {
+      try { AppUpdates.check(c,true,offline,installed); fail("HTTP failure hidden"); }
+      catch (AppUpdates.UpdateFailure expected) { assertTrue(AppUpdates.failure(expected).contains("HTTP 503")); }
+      assertEquals(0,AppUpdates.prefs(c).getLong("success",0));
+    }
     finally { offline.connectionPool().evictAll(); offline.dispatcher().executorService().shutdown(); }
   }
 }
