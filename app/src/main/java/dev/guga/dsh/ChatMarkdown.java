@@ -17,6 +17,7 @@ import io.noties.markwon.ext.tasklist.TaskListPlugin;
 final class ChatMarkdown {
   final Markwon renderer;
   String source;
+  boolean plain;
   ChatMarkdown(Context context) {
     renderer=Markwon.builder(context)
       .usePlugin(new io.noties.markwon.AbstractMarkwonPlugin(){
@@ -40,13 +41,40 @@ final class ChatMarkdown {
       source=markdown;
       // Table rows discover wrapped cell heights during drawing. Markwon's
       // afterSetText hook attaches the invalidator that remeasures those rows.
-      renderer.setParsedMarkdown(view,renderer.toMarkdown(markdown));
+      android.text.Spanned parsed=renderer.toMarkdown(markdown);
+      boolean nextPlain=parsed.getSpans(0,parsed.length(),Object.class).length==0;
+      if(plain && nextPlain && view.getText() instanceof android.text.Editable
+          && parsed.toString().startsWith(view.getText().toString())) {
+        ((android.text.Editable)view.getText()).append(parsed.subSequence(view.length(),parsed.length()));
+      } else if(nextPlain) {
+        view.setText(parsed,TextView.BufferType.EDITABLE);
+      } else {
+        prepareTables(view,parsed);
+        renderer.setParsedMarkdown(view,parsed);
+      }
+      plain=nextPlain;
       // Keep our short-tap links and long-press message selection behavior.
       view.setMovementMethod(null);
       view.setClickable(true);
       view.setLongClickable(true);
     }
     view.setVisibility(markdown.isEmpty()?android.view.View.GONE:android.view.View.VISIBLE);
+  }
+  // TableRowSpan normally learns its height in the first visible draw, causing
+  // every streaming update to briefly collapse then expand long wrapped rows.
+  // Prime the new rows offscreen before TextView performs its first measurement.
+  static void prepareTables(TextView view,android.text.Spanned parsed) {
+    io.noties.markwon.ext.tables.TableRowSpan[] rows=parsed.getSpans(0,parsed.length(),io.noties.markwon.ext.tables.TableRowSpan.class);
+    if(rows.length==0)return;
+    int width=view.getLayoutParams()!=null&&view.getLayoutParams().width>0?view.getLayoutParams().width:view.getMaxWidth();
+    if(width<=0||width==Integer.MAX_VALUE)width=view.getWidth()>0?view.getWidth():view.getResources().getDisplayMetrics().widthPixels;
+    width=Math.max(1,width-view.getPaddingLeft()-view.getPaddingRight());
+    android.graphics.Bitmap scratch=android.graphics.Bitmap.createBitmap(width,1,android.graphics.Bitmap.Config.ARGB_8888);
+    try {
+      android.graphics.Canvas canvas=new android.graphics.Canvas(scratch);
+      for(io.noties.markwon.ext.tables.TableRowSpan row:rows)
+        row.draw(canvas,parsed,parsed.getSpanStart(row),parsed.getSpanEnd(row),0,0,0,1,view.getPaint());
+    } finally {scratch.recycle();}
   }
   // Keep normal long-press selection and message multi-select; only short link taps open URLs.
   static void links(TextView view, MainActivity host) {

@@ -99,6 +99,16 @@ final class Settings {
     return prefs.getString("model", "deepseek-v4-pro");
   }
 
+  String reasoningEffort() {
+    String value = prefs.getString("reasoningEffort", "high");
+    return ("none".equals(value) || "low".equals(value) || "high".equals(value) || "max".equals(value)) ? value : "high";
+  }
+
+  void saveReasoningEffort(String value) throws Exception {
+    if (!("none".equals(value) || "low".equals(value) || "high".equals(value) || "max".equals(value))) throw new Exception("思考强度无效");
+    if (!prefs.edit().putString("reasoningEffort", value).commit()) throw new Exception("设置保存失败");
+  }
+
   boolean webSearch() { return prefs.getBoolean("webSearch", true); }
   boolean webFetch() { return prefs.getBoolean("webFetch", true); }
   void saveWeb(boolean search, boolean fetch) throws Exception {
@@ -110,7 +120,8 @@ final class Settings {
       .put("base", base()).put("webSearch", webSearch()).put("webFetch", webFetch())
       .put("model", model())
       .put("hasKey", !apiKey().isEmpty())
-      .put("thinking", prefs.getBoolean("thinking", false))
+      .put("thinking", !"none".equals(reasoningEffort()))
+      .put("reasoningEffort", reasoningEffort())
       .put("maxSteps", prefs.getInt("steps", 32));
   }
 }

@@ -58,6 +58,10 @@ final class NativeBridge extends NanoHTTPD {
     return !response.getMimeType().startsWith("text/event-stream") && super.useGzipWhenAccepted(response);
   }
 
+  static long requestLimit(String route) {
+    return ("/model".equals(route) ? 48L : 3L) * 1024 * 1024;
+  }
+
   @Override
   public Response serve(IHTTPSession session) {
     if (
@@ -71,7 +75,7 @@ final class NativeBridge extends NanoHTTPD {
       long length = Long.parseLong(
         session.getHeaders().getOrDefault("content-length", "0")
       );
-      if (length > 3 * 1024 * 1024) return json(
+      if (length < 0 || length > requestLimit(session.getUri())) return json(
         Response.Status.PAYLOAD_TOO_LARGE,
         "请求过大"
       );

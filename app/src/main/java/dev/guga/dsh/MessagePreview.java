@@ -22,6 +22,7 @@ final class MessagePreview {
       +"</style></head><body><main>"+org.jsoup.Jsoup.clean(renderer.render(parser.parse(source)),org.jsoup.safety.Safelist.relaxed())+"</main></body></html>";
   }
   static void open(MainActivity host,String source) {
+    if(SvgPreview.standalone(source)){SvgPreview.open(host,source);return;}
     LinearLayout body=new LinearLayout(host);body.setOrientation(LinearLayout.VERTICAL);
     LinearLayout page=host.showPage("消息预览",body);
     // Reuse navigation/insets but give the document its own full-height scrolling surface.

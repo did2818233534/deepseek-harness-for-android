@@ -4,8 +4,13 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import assert from "node:assert/strict";
-const root = fs.mkdtempSync(path.join(os.tmpdir(), "dsh-android-test-"));
+const testHome = fs.mkdtempSync(path.join(os.tmpdir(), "dsh-android-test-"));
+const root = path.join(testHome, "runtime");
+fs.mkdirSync(root);
+const workspace = path.join(testHome, "workspace");
+fs.mkdirSync(workspace);
 const token = "test-token";
+let modelName = "test-model", reasoningEffort;
 let webEnabled = true, webRequests = [], invalidWeb = false;
 let child,
   requests = [],
@@ -22,10 +27,11 @@ const bridge = http.createServer(async (req, res) => {
   if (req.url === "/settings") {
     res.end(
       JSON.stringify({
-        model: "test-model",
+        model: modelName,
         hasKey: true,
         maxSteps: 32,
         thinking: false,
+        reasoningEffort,
         webSearch: webEnabled, webFetch: webEnabled,
       }),
     );
@@ -359,14 +365,69 @@ try {
   const endpoint = fs.readFileSync(path.join(root, 'runtime-port'), 'utf8');
   const gone = await fetch('http://127.0.0.1:' + endpoint + '/select', {method:'POST',headers:{authorization:'Bearer '+token},body:JSON.stringify({id})});
   assert.equal(gone.status,400, 'deleted IDs cannot be silently recreated');
+  mode = 'unicode';
+  for (const effort of [undefined, 'none', 'low', 'high', 'max']) {
+    reasoningEffort = effort;
+    await api('/send', {text:'检查思考强度'});
+    await until(async () => !(await api('/state')).busy);
+    const outbound = requests.at(-1);
+    assert.equal(outbound.thinking.type, effort === 'none' ? 'disabled' : 'enabled');
+    assert.equal(outbound.reasoning_effort, effort === 'none' ? undefined : effort || 'high');
+  }
+  assert(requests.at(-1).messages.some(m => m.role === 'system' && m.content.includes('SMIL') && m.content.includes('SVG')), 'animation instruction reaches model');
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64');
+  fs.writeFileSync(path.join(workspace,'图片.png'), png);
+  fs.writeFileSync(path.join(workspace,'备注.txt'), '中文附件');
+  const attachments = [{path:'图片.png',name:'图片.png',mime:'image/png'}, {path:'备注.txt',name:'备注.txt',mime:'text/plain'}];
+  await api('/send', {text:'看看图片', attachments});
+  await until(async () => !(await api('/state')).busy);
+  const attachmentState = await api('/state');
+  assert.equal(attachmentState.turns.at(-1).userText, '看看图片');
+  assert.equal(attachmentState.turns.at(-1).attachments.length, 2);
+  assert(!JSON.stringify(attachmentState).includes(png.toString('base64')), 'state never contains image base64');
+  let imageMessage = requests.at(-1).messages.findLast(m => m.role === 'user');
+  assert(imageMessage.content.some(b => b.type === 'image_url' && b.image_url.url === 'data:image/png;base64,'+png.toString('base64')));
+  assert(imageMessage.content.some(b => b.type === 'text' && b.text.includes('备注.txt')));
+  fs.writeFileSync(path.join(workspace,'图片.png'), 'changed working file');
+  await stop(); await start();
+  assert.equal((await api('/state')).turns.at(-1).attachments[0].name, '图片.png');
+  await api('/send', {text:'继续'});
+  await until(async () => !(await api('/state')).busy);
+  assert(requests.at(-1).messages.some(m => Array.isArray(m.content) && m.content.some(b => b.type === 'image_url' && b.image_url.url.endsWith(png.toString('base64')))), 'history replays immutable image after restart');
+  fs.writeFileSync(path.join(workspace,'图片.png'), png);
+  await api('/send', {text:'',attachments:[attachments[0]]});
+  await until(async () => !(await api('/state')).busy);
+  assert.equal((await api('/state')).turns.at(-1).attachments.length,1,'image-only messages accepted');
+  const attachmentPort = fs.readFileSync(path.join(root,'runtime-port'),'utf8');
+  modelName = 'deepseek-v4-pro';
+  const unsupported = await fetch('http://127.0.0.1:'+attachmentPort+'/send', {method:'POST',headers:{authorization:'Bearer '+token},body:JSON.stringify({text:'look',attachments:[attachments[0]]})});
+  assert.equal(unsupported.status,400,'known text-only models reject images explicitly');
+  const requestsBeforeModelSwitch = requests.length;
+  await api('/send', {text:'切换模型后继续分析之前图片'});
+  await until(async () => !(await api('/state')).busy);
+  assert.equal(requests.length,requestsBeforeModelSwitch+1,'text-only continuation still requests model');
+  assert.equal(requests.at(-1).model,'deepseek-v4-pro','model change takes effect');
+  assert(!requests.at(-1).messages.some(m => Array.isArray(m.content) && m.content.some(b => b.type === 'image_url')),'Pro receives no historical images');
+  assert((await api('/state')).turns.some(t => t.attachments?.length),'history keeps image metadata');
+  modelName = 'deepseek-flash';
+  await api('/send',{text:'切回 Flash'});
+  await until(async () => !(await api('/state')).busy);
+  assert(requests.at(-1).messages.some(m => Array.isArray(m.content) && m.content.some(b => b.type === 'image_url')),'Flash receives historical images again');
+
+  modelName = 'test-model';
+
+  for (const bad of [[{path:'../runtime/runtime-port',mime:'image/png'}], [{path:'备注.txt',mime:'image/png'}], Array(9).fill(attachments[0])]) {
+    const response = await fetch('http://127.0.0.1:'+attachmentPort+'/send', {method:'POST',headers:{authorization:'Bearer '+token},body:JSON.stringify({text:'invalid',attachments:bad})});
+    assert.equal(response.status,400,'invalid attachment is rejected before sending');
+  }
   const p = fs.readFileSync(path.join(root, "runtime-port"), "utf8");
   assert.equal((await fetch("http://127.0.0.1:" + p + "/state")).status, 401);
   console.log(
-    "PASS: upstream loop, tool round trip, transcript mapping, durable resume, cancellation, authorization, upstream multi-query search/fetch, malformed response, tool enablement",
+    "PASS: upstream loop, tool round trip, transcript mapping, durable resume, cancellation, authorization, upstream multi-query search/fetch, malformed response, tool enablement, image transport and durable attachment replay",
   );
 } finally {
   await stop();
   bridge.closeAllConnections();
   await new Promise((r) => bridge.close(r));
-  fs.rmSync(root, { recursive: true, force: true });
+  fs.rmSync(testHome, { recursive: true, force: true });
 }

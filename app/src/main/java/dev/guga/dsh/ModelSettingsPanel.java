@@ -25,7 +25,10 @@ final class ModelSettingsPanel {
   Button modelButton;
   ImageButton refresh;
   TextView state;
-  Switch search, thinking, fetch;
+  Switch search, fetch;
+  String effort;
+  static final String[] EFFORTS = {"none", "low", "high", "max"};
+  static final String[] EFFORT_LABELS = {"关闭", "低", "高", "最高"};
   EditText key, steps;
   Dialog dialog;
   View page;
@@ -65,10 +68,12 @@ final class ModelSettingsPanel {
     box.addView(selector, a.spacedControl());
     state = a.label("", 12, a.muted);
     state.setPadding(a.dp(4), 0, a.dp(4), a.dp(8)); box.addView(state);
+    state.setVisibility(View.GONE);
+    effort = settings.reasoningEffort();
+    effortControl();
     if (!quick) {
       key = a.secretField(box, "API Key", settings.apiKey());
       key.setSelectAllOnFocus(true);
-      thinking = toggle("深度思考", values.optBoolean("thinking"));
     }
     search = toggle("联网搜索", settings.webSearch());
     if (!quick) {
@@ -90,6 +95,40 @@ final class ModelSettingsPanel {
       try { catalog(cache); } catch (Exception ignored) {}
     }
     load();
+  }
+  void setState(String text) {
+    state.setText(text);
+    state.setVisibility(text == null || text.isEmpty() ? View.GONE : View.VISIBLE);
+  }
+  void effortControl() {
+    LinearLayout panel = new LinearLayout(a); panel.setOrientation(LinearLayout.VERTICAL);
+    panel.setPadding(a.dp(16), a.dp(12), a.dp(16), a.dp(8));
+    panel.setBackground(a.ui.shape(UiStyle.LOW, 20));
+    TextView title = a.label("思考强度", 16, a.ink); panel.addView(title);
+    TextView value = a.label("", 16, a.accent); value.setGravity(Gravity.CENTER);
+    panel.addView(value);
+    SeekBar slider = new EffortSlider(a); slider.setMax(3);
+    slider.setProgressTintList(android.content.res.ColorStateList.valueOf(a.accent));
+    slider.setThumbTintList(android.content.res.ColorStateList.valueOf(a.accent));
+    int initial = java.util.Arrays.asList(EFFORTS).indexOf(effort);
+    slider.setProgress(Math.max(0, initial)); value.setText(EFFORT_LABELS[slider.getProgress()]);
+    slider.setContentDescription("思考强度：" + EFFORT_LABELS[slider.getProgress()]);
+    panel.addView(slider, new LinearLayout.LayoutParams(-1, a.dp(48)));
+    slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+      public void onStartTrackingTouch(SeekBar bar) {}
+      public void onStopTrackingTouch(SeekBar bar) {}
+      public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
+        if (fromUser) {
+          String previous = effort; effort = EFFORTS[progress];
+          if (!persist()) { effort = previous; bar.setProgress(java.util.Arrays.asList(EFFORTS).indexOf(previous)); return; }
+        }
+        value.setText(EFFORT_LABELS[progress]);
+        bar.setContentDescription("思考强度：" + EFFORT_LABELS[progress]);
+      }
+    });
+    LinearLayout.LayoutParams panelParams = a.spacedControl();
+    panelParams.height = LinearLayout.LayoutParams.WRAP_CONTENT;
+    box.addView(panel, panelParams);
   }
   Switch toggle(String title, boolean checked) {
     Switch toggle = new Switch(a);
@@ -125,11 +164,12 @@ final class ModelSettingsPanel {
       int count = quick ? current.optInt("maxSteps", 32) : Integer.parseInt(steps.getText().toString());
       if (count < 1 || count > 128) throw new Exception("步骤数应为 1–128");
       settings.save(settings.base(), selected, quick ? "" : key.getText().toString(),
-        quick ? current.optBoolean("thinking") : thinking.isChecked(), count);
+        !effort.equals("none"), count);
+      settings.saveReasoningEffort(effort);
       settings.saveWeb(search.isChecked(), quick ? settings.webFetch() : fetch.isChecked());
       a.status.setText(selected);
       return true;
-    } catch (Exception e) { state.setText(e instanceof NumberFormatException ? "请输入有效的步骤数" : e.getMessage()); return false; }
+    } catch (Exception e) { setState(e instanceof NumberFormatException ? "请输入有效的步骤数" : e.getMessage()); return false; }
   }
   void choose() {
     if (popup != null && popup.isShowing()) { popup.dismiss(); return; }
@@ -178,19 +218,19 @@ final class ModelSettingsPanel {
     models.clear(); models.addAll(available); loaded = true;
     // Refresh never changes a user's selected model or silently saves the first option.
     modelButton.setText(display(selected));
-    state.setText("可选模型 " + models.size() + " 个");
+    setState("");
   }
   void load() {
     if (closed || !refresh.isEnabled()) return;
     try {
       String secret = key == null ? "" : key.getText().toString().trim();
       if (secret.isEmpty()) secret = settings.apiKey();
-      if (secret.isEmpty()) { state.setText("请先在模型与服务中填写 API Key"); return; }
-      refresh.setEnabled(false); state.setText("正在获取模型列表…");
+      if (secret.isEmpty()) { setState("请先在模型与服务中填写 API Key"); return; }
+      refresh.setEnabled(false); setState("正在获取模型列表…");
       client.newCall(new okhttp3.Request.Builder().url("https://api.deepseek.com/models")
         .header("Authorization", "Bearer " + secret).build()).enqueue(new okhttp3.Callback() {
         void fail(String text) { a.runOnUiThread(() -> {
-          if (closed) return; refresh.setEnabled(true); state.setText(text);
+          if (closed) return; refresh.setEnabled(true); setState(text);
         }); }
         public void onFailure(okhttp3.Call call, IOException e) { fail("获取失败，点击右侧刷新图标重试"); }
         public void onResponse(okhttp3.Call call, okhttp3.Response response) {
@@ -204,12 +244,12 @@ final class ModelSettingsPanel {
                 catalog(json);
                 a.getSharedPreferences("settings", 0).edit().putString("modelCatalog", json).apply();
                 if (popup != null && popup.isShowing()) { popup.dismiss(); choose(); }
-              } catch (Exception e) { state.setText("模型列表格式异常，请重试"); }
+              } catch (Exception e) { setState("模型列表格式异常，请重试"); }
             });
           } catch (Exception e) { fail("模型列表格式异常，请重试"); }
         }
       });
-    } catch (Exception e) { refresh.setEnabled(true); state.setText("无法读取密钥，请重新填写"); }
+    } catch (Exception e) { refresh.setEnabled(true); setState("无法读取密钥，请重新填写"); }
   }
   void close() {
     if (closed) return;

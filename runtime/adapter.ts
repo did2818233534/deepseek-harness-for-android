@@ -1,3 +1,4 @@
+import { attachmentImage } from "./attachments.ts";
 import { StringDecoder } from "node:string_decoder";
 import { LlmAdapter, ToolCallId } from "@deepseek-ai/dsh-llm";
 /** Translates the upstream canonical transcript to a Chat Completions transport owned by Android. */
@@ -5,6 +6,7 @@ export class AndroidAdapter extends LlmAdapter {
   constructor(
     private bridge,
     private settings,
+    private workspace: string,
   ) {
     super();
   }
@@ -12,6 +14,7 @@ export class AndroidAdapter extends LlmAdapter {
     return { provider, id: model, name: model };
   }
   async *stream(options) {
+    const omitImages = /^(deepseek-v4-pro|deepseek-pro|deepseek-reasoner|deepseek-chat)$/i.test(options.model);
     const messages = options.messages.map((m) => {
       const text = m.content
         .filter((b) => b.type === "text")
@@ -21,7 +24,7 @@ export class AndroidAdapter extends LlmAdapter {
         return { role: "tool", tool_call_id: m.toolCallId, content: text };
       const out: any = {
         role: m.role === "developer" ? "system" : m.role,
-        content: text,
+        content: !omitImages && m.content.some(b => b.type === "image") ? m.content.flatMap(b => b.type === "text" ? [{type:"text", text:b.text}] : b.type === "image" ? [attachmentImage(this.workspace, b.attachment)] : []) : (text || (omitImages && m.content.some(b => b.type === "image") ? "[此前发送的图片，本轮未附带]" : "")),
       };
       if (m.role === "assistant") {
         const calls = m.content.filter((b) => b.type === "tool-call");
@@ -50,7 +53,11 @@ export class AndroidAdapter extends LlmAdapter {
         type: "function",
         function: t,
       }));
-    if (this.settings().thinking) body.thinking = { type: "enabled" };
+    const configuredEffort = this.settings().reasoningEffort;
+    const effort = ["none", "low", "high", "max"].includes(configuredEffort) ? configuredEffort : "high";
+    body.thinking = {type: effort === "none" ? "disabled" : "enabled"};
+    if (effort !== "none") body.reasoning_effort = effort;
+    if (Buffer.byteLength(JSON.stringify(body), "utf8") > 48 * 1024 * 1024) throw Error("当前对话的图片总量过大，请新建对话或减少图片后重试");
     const response = await this.bridge("/model", body, options.signal, true);
     if (!response.body) throw Error("Model returned no stream");
     const decoder = new StringDecoder("utf8");

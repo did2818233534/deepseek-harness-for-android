@@ -7,6 +7,35 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import org.junit.Test;
 
 public class MarkdownTests {
+  @Test public void longStreamingTextAndTablesDoNotResetBetweenFrames() {
+    var i=InstrumentationRegistry.getInstrumentation();i.runOnMainSync(()->{
+      TextView view=new TextView(i.getTargetContext());view.setTextSize(16);view.setMaxWidth(300);view.setLayoutParams(new android.widget.LinearLayout.LayoutParams(300,-2));
+      ChatMarkdown md=new ChatMarkdown(i.getTargetContext());md.update(view,"开始");
+      CharSequence buffer=view.getText();String text="开始";
+      for(int n=0;n<80;n++){text+="这是一段持续输出的长回复。";md.update(view,text);assertSame("Plain text should append to same buffer",buffer,view.getText());}
+      String table="|事项|说明|\n|---|---|\n|一|这是很长的中文表格内容，需要连续换行，不能在每次输出时缩成一行|\n\n";
+      for(int n=1;n<=12;n++){
+        md.update(view,table+"表格之后继续生成正文。".repeat(n));
+        view.measure(android.view.View.MeasureSpec.makeMeasureSpec(300,android.view.View.MeasureSpec.EXACTLY),android.view.View.MeasureSpec.makeMeasureSpec(0,android.view.View.MeasureSpec.UNSPECIFIED));
+        view.layout(0,0,300,view.getMeasuredHeight());
+        Spanned sp=(Spanned)view.getText();
+        io.noties.markwon.ext.tables.TableRowSpan row=null;
+        for(var candidate:sp.getSpans(0,sp.length(),io.noties.markwon.ext.tables.TableRowSpan.class)) {
+          var cell=candidate.findLayoutForHorizontalOffset(candidate.cellWidth()+1);
+          if(cell!=null&&cell.getText().toString().contains("很长"))row=candidate;
+        }
+        assertNotNull("Find the data row independently of span storage order",row);
+        android.graphics.Paint.FontMetricsInt before=new android.graphics.Paint.FontMetricsInt(),after=new android.graphics.Paint.FontMetricsInt();
+        row.getSize(view.getPaint(),sp,sp.getSpanStart(row),sp.getSpanEnd(row),before);
+        android.graphics.Bitmap bitmap=android.graphics.Bitmap.createBitmap(300,1,android.graphics.Bitmap.Config.ARGB_8888);
+        row.draw(new android.graphics.Canvas(bitmap),sp,sp.getSpanStart(row),sp.getSpanEnd(row),0,0,0,1,view.getPaint());bitmap.recycle();
+        row.getSize(view.getPaint(),sp,sp.getSpanStart(row),sp.getSpanEnd(row),after);
+        assertEquals("Table height must be ready before its first visible frame",before.ascent,after.ascent);
+        assertTrue(before.ascent<0);
+        assertTrue("Long table cell actually wraps",row.findLayoutForHorizontalOffset(row.cellWidth()+1).getLineCount()>1);
+      }
+    });
+  }
   @Test public void wrappedTableRowsRemeasureAtDifferentWidthsAndFontSizes() throws Exception {
     var i=InstrumentationRegistry.getInstrumentation();var c=i.getTargetContext();
     dev.guga.updates.UpdateTestDriver.prefs(c).edit().putString("checkedDay",dev.guga.updates.UpdateTestDriver.today()).commit();

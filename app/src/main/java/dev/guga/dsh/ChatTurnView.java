@@ -11,15 +11,19 @@ final class ChatTurnView extends LinearLayout {
   final TextView user, answer, reasoning, steps, waiting;
   final LinearLayout process, details, header;
   final TextView caption;
+  final TextView svgCard;
   final ImageView chevron;
   boolean expanded, initialized, wasActive;
-  String turnId="";
+  String selectionKey="";
+  String turnId="", attachmentKey="";
+  final LinearLayout attachmentRow;
   final ChatMarkdown markdown;
 
   ChatTurnView(MainActivity host) {
     super(host); this.host=host; setOrientation(VERTICAL);
     markdown=new ChatMarkdown(host);
     user=bubble(true); addView(user, bubbleParams(true));
+    attachmentRow=new LinearLayout(host);attachmentRow.setOrientation(VERTICAL);addView(attachmentRow,bubbleParams(true));
     process=new LinearLayout(host); process.setOrientation(VERTICAL);
     LayoutParams processParams=new LayoutParams(-1,-2); processParams.bottomMargin=host.dp(10);
     addView(process,processParams);
@@ -40,6 +44,12 @@ final class ChatTurnView extends LinearLayout {
     steps=host.label("",13,host.muted); steps.setTextIsSelectable(true); steps.setLineSpacing(host.dp(5),1);
     details.addView(steps,new LayoutParams(-1,-2)); process.addView(details,new LayoutParams(-1,-2));
     answer=bubble(false); addView(answer,bubbleParams(false));
+    svgCard=host.label("SVG 图形 · 点击预览",15,UiStyle.ACCENT);
+    svgCard.setPadding(host.dp(16),host.dp(14),host.dp(16),host.dp(14));
+    svgCard.setBackground(host.ui.surface(UiStyle.SURFACE,20));svgCard.setVisibility(GONE);
+    addView(svgCard,bubbleParams(false));
+    svgCard.setOnClickListener(v->{if(host.messageActions.active())host.messageActions.toggle(turnId+"/a");else SvgPreview.open(host,markdown.source==null?"":markdown.source);});
+    svgCard.setOnLongClickListener(v->{host.messageActions.toggle(turnId+"/a");return true;});
     ChatMarkdown.links(answer,host);
     user.setOnLongClickListener(v -> {host.messageActions.toggle(turnId+"/u");return true;});
     answer.setOnLongClickListener(v -> {host.messageActions.toggle(turnId+"/a");return true;});
@@ -63,7 +73,19 @@ final class ChatTurnView extends LinearLayout {
   }
   void update(JSONObject turn) {
     turnId=turn.optString("id");selection();
+    JSONArray attached=turn.optJSONArray("attachments");String key=attached==null?"":attached.toString();
+    if(!key.equals(attachmentKey)){
+      attachmentKey=key;attachmentRow.removeAllViews();
+      if(attached!=null)for(int n=0;n<attached.length();n++){
+        JSONObject item=attached.optJSONObject(n);if(item==null)continue;
+        attachmentRow.addView(Attachments.card(host,item,null,()->{if(host.messageActions.active())host.messageActions.toggle(turnId+"/u");},()->host.messageActions.toggle(turnId+"/u")));
+      }
+    }
+    attachmentRow.setVisibility(attachmentRow.getChildCount()>0?VISIBLE:GONE);
     text(user,turn.optString("userText")); markdown.update(answer,turn.optString("text"));
+    String svgSource=turn.optString("text");
+    svgCard.setVisibility(SvgPreview.extract(svgSource).isEmpty()||SvgPreview.standalone(svgSource)?GONE:VISIBLE);
+    if(SvgPreview.standalone(svgSource))answer.setText("SVG 图形 · 点击预览");
     String thought=turn.optString("reasoning"); JSONArray tools=turn.optJSONArray("tools");
     boolean hasTools=tools!=null&&tools.length()>0, hasProcess=!thought.isEmpty()||hasTools;
     boolean active=turn.optBoolean("processActive")&&turn.optBoolean("busy");
@@ -86,12 +108,22 @@ final class ChatTurnView extends LinearLayout {
       (!thought.isEmpty()?"思考过程":"执行过程");
     long elapsed=turn.optLong("processElapsedMs");
     if(elapsed>0) label+=" · "+duration(elapsed);
-    caption.setText(label); showExpansion();
+    if(!label.contentEquals(caption.getText()))caption.setText(label); showExpansion();
     waiting.setText("正在请求模型…");
     waiting.setVisibility(turn.optBoolean("busy")&&!hasProcess&&turn.optString("text").isEmpty()?VISIBLE:GONE);
   }
+  String attachmentSummary(){
+    StringBuilder out=new StringBuilder();try{JSONArray a=new JSONArray(attachmentKey.isEmpty()?"[]":attachmentKey);for(int n=0;n<a.length();n++)out.append("\n附件：").append(a.getJSONObject(n).optString("name"));}catch(Exception ignored){}return out.toString();
+  }
   void selection() {
     if(host.messageActions==null)return;
+    String nextSelection=turnId+":"+host.messageActions.selected.contains(turnId+"/u")+":"+host.messageActions.selected.contains(turnId+"/a");
+    if(nextSelection.equals(selectionKey))return;
+    selectionKey=nextSelection;
+    boolean attachmentSelected=host.messageActions.selected.contains(turnId+"/u");
+    attachmentRow.setBackground(attachmentSelected?host.ui.surface(0xFFDDD0F4,16):null);
+    attachmentRow.setContentDescription((attachmentSelected?"已选择，":"")+"用户附件，长按选择");
+    svgCard.setBackground(host.ui.surface(host.messageActions.selected.contains(turnId+"/a")?0xFFDDD0F4:UiStyle.SURFACE,20));
     for(boolean mine:new boolean[]{true,false}){
       TextView view=mine?user:answer;boolean selected=host.messageActions.selected.contains(turnId+(mine?"/u":"/a"));
       android.graphics.drawable.GradientDrawable background=host.ui.bubble(selected?0xFFDDD0F4:mine?0xFFE8DEF8:UiStyle.LOW,mine);

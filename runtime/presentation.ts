@@ -41,7 +41,7 @@ export function presentTurns(events: any[], liveFrames: any[], busy: boolean) {
     if (e.type === 'user/message') {
       if (turn && processStart) closeProcess(e.time);
       processStart = 0; processTotal = 0;
-      turn = {id: String(e.seq), userText: (e.data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n'), text: '', reasoning: '', tools: [], busy: false, startedAt: e.time, endedAt: 0, processActive: false, processElapsedMs: 0};
+      turn = {id: String(e.seq), attachments: e.data.source?.attachments || [], userText: e.data.source?.userText ?? (e.data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n'), text: '', reasoning: '', tools: [], busy: false, startedAt: e.time, endedAt: 0, processActive: false, processElapsedMs: 0};
       turns.push(turn);
     }
     if (!turn) continue;

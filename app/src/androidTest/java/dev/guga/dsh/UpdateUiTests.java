@@ -56,7 +56,14 @@ public class UpdateUiTests {
     UpdateTestDriver.prefs(c).edit().remove("ready").remove("session").commit(); UpdateTestDriver.apk(c).delete();
     UpdateInstallActivity activity=(UpdateInstallActivity)i.startActivitySync(new android.content.Intent(c,UpdateInstallActivity.class).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
     try {
-      Thread.sleep(500); i.waitForIdleSync();
+      // Installation validation runs on an executor; wait for its observable UI result.
+      for(int n=0;n<50;n++) {
+        boolean[] ready={false};
+        i.runOnMainSync(()->ready[0]=UpdateTestDriver.errorDialog(activity)!=null);
+        if(ready[0])break;
+        Thread.sleep(100);
+      }
+      i.waitForIdleSync();
       i.runOnMainSync(() -> {
         assertNotNull(UpdateTestDriver.errorDialog(activity)); assertTrue(UpdateTestDriver.errorDialog(activity).isShowing());
         assertTrue(DeviceTests.containsText(UpdateTestDriver.errorDialog(activity).getWindow().getDecorView(),"安装包无效"));

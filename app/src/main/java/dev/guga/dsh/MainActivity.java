@@ -22,7 +22,7 @@ import org.json.*;
 public final class MainActivity extends Activity {
 
   static final int IMPORT = 10,
-    EXPORT = 11;
+    EXPORT = 11, IMPORT_IMAGE = 12;
   final int ink = Color.rgb(30, 34, 43),
     muted = Color.rgb(127, 132, 144),
     accent = Color.rgb(103, 80, 164),
@@ -33,6 +33,9 @@ public final class MainActivity extends Activity {
   final Handler handler = new Handler(Looper.getMainLooper());
   LinearLayout chatRoot, composer;
   MessageActions messageActions;
+  Attachments attachments;
+  boolean sending;
+  int attachmentPickerGeneration;
   boolean settingsPage;
   final ArrayDeque<View> pageHistory = new ArrayDeque<>();
   final Map<View, Runnable> pageCleanup = new HashMap<>();
@@ -174,9 +177,11 @@ public final class MainActivity extends Activity {
     input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
     input.setPadding(dp(4), dp(12), dp(4), dp(14));
     input.setBackgroundColor(Color.TRANSPARENT);
+    attachments=new Attachments(this);
+    composer.addView(attachments.tray,new LinearLayout.LayoutParams(-1,-2));
     composer.addView(input, new LinearLayout.LayoutParams(-1, -2));
     LinearLayout controls = row();
-    controls.addView(icon(R.drawable.ic_add, "添加文件", v -> importFile()), new LinearLayout.LayoutParams(dp(48), dp(48)));
+    controls.addView(icon(R.drawable.ic_add, "添加附件", v -> attachmentMenu()), new LinearLayout.LayoutParams(dp(48), dp(48)));
     controls.addView(icon(R.drawable.ic_model, "模型设置", v -> modelSettings(true)), new LinearLayout.LayoutParams(dp(48), dp(48)));
     controls.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
     send = icon(R.drawable.ic_send, "发送消息", v -> send());
@@ -188,6 +193,9 @@ public final class MainActivity extends Activity {
     messageActions=new MessageActions(this,root,composer);
     if (saved != null) {
       input.setText(saved.getString("draft", ""));
+      attachments.restore(saved.getString("attachments","[]"));
+      attachments.generation=saved.getInt("attachmentGeneration",0);
+      attachmentPickerGeneration=saved.getInt("attachmentPickerGeneration",0);
       exportPath = saved.getString("exportPath", "");
       messageActions.pendingExport=saved.getString("pendingMarkdown", "");
     }
@@ -204,6 +212,9 @@ public final class MainActivity extends Activity {
   @Override
   public void onSaveInstanceState(Bundle out) {
     out.putString("draft", input.getText().toString());
+    out.putString("attachments",attachments.snapshot().toString());
+    out.putInt("attachmentGeneration",attachments.generation);
+    out.putInt("attachmentPickerGeneration",attachmentPickerGeneration);
     out.putString("exportPath", exportPath);
     out.putString("pendingMarkdown",messageActions.pendingExport);
     super.onSaveInstanceState(out);
@@ -448,33 +459,41 @@ public final class MainActivity extends Activity {
         Api.call(route, body);
         runOnUiThread(() -> {
           try {
+            if(route.equals("/select")){attachments.reset();input.setText("");}
+            if(route.equals("/send")){sending=false;send.setEnabled(attachments.importing==0);}
             done.run();
           } catch (Exception e) {
             toast(e.getMessage());
           }
         });
       } catch (Exception e) {
+        if(route.equals("/send"))runOnUiThread(()->{sending=false;send.setEnabled(attachments.importing==0);});
         toast(e.getMessage());
       }
     });
   }
 
   void send() {
+    if(sending||attachments.importing>0)return;
     if (busy) {
       request("/cancel", new JSONObject(), () -> {});
       return;
     }
     String text = input.getText().toString().trim();
-    if (text.isEmpty()) return;
+    JSONArray attached=attachments.snapshot();
+    if (text.isEmpty() && attached.length()==0) return;
     try {
       startService(new Intent(this, HarnessService.class));
-      request("/send", new JSONObject().put("text", text), () -> {
-        input.setText("");
+      sending=true;send.setEnabled(false);
+      request("/send", new JSONObject().put("text", text).put("attachments",attached), () -> {
+        if(input.getText().toString().trim().equals(text))input.setText("");
+        attachments.clearSent(attached);
         input.requestFocus();
         busy = true;
         send.setImageResource(R.drawable.ic_stop);
       });
     } catch (Exception e) {
+      sending=false;send.setEnabled(attachments.importing==0);
       toast(e.getMessage());
     }
   }
@@ -989,10 +1008,41 @@ public final class MainActivity extends Activity {
     });
   }
 
+  void attachmentMenu() {
+    LinearLayout choices = new LinearLayout(this); choices.setOrientation(LinearLayout.VERTICAL);
+    Dialog[] panel = new Dialog[1];
+    Button photo = button("图片", v -> {panel[0].dismiss(); importImage();});
+    Button file = button("文件", v -> {panel[0].dismiss(); importFile();});
+    Button[] buttons = {photo,file}; int[] icons = {R.drawable.ic_image,R.drawable.ic_folder};
+    for(int n=0;n<buttons.length;n++) {
+      android.graphics.drawable.Drawable icon=getDrawable(icons[n]);icon.setTint(accent);icon.setBounds(0,0,dp(24),dp(24));
+      buttons[n].setCompoundDrawablesRelative(icon,null,null,null);buttons[n].setCompoundDrawablePadding(dp(12));buttons[n].setGravity(Gravity.CENTER_VERTICAL|Gravity.START);
+      choices.addView(buttons[n],spacedControl());
+    }
+    panel[0]=bottomPanel("添加附件",choices);
+  }
+  Intent imagePickerIntent() {
+    if(android.os.Build.VERSION.SDK_INT>=33) {
+      Intent intent = new Intent(android.provider.MediaStore.ACTION_PICK_IMAGES).setType("image/*");
+      int remaining=Math.max(1,8-attachments.pending.size());
+      if(remaining>1)intent.putExtra(android.provider.MediaStore.EXTRA_PICK_IMAGES_MAX,Math.min(remaining,android.provider.MediaStore.getPickImagesMaxLimit()));
+      return intent;
+    }
+    return new Intent(Intent.ACTION_PICK,android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI).setType("image/*").putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);
+  }
+  void importImage() {
+    attachmentPickerGeneration=attachments.generation;
+    if(attachments.pending.size()>=8){toast("每条消息最多添加 8 个附件");return;}
+    try {startActivityForResult(imagePickerIntent(),IMPORT_IMAGE);}
+    catch(android.content.ActivityNotFoundException e) {
+      startActivityForResult(new Intent(Intent.ACTION_GET_CONTENT).setType("image/*").putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true),IMPORT_IMAGE);
+    }
+  }
   void importFile() {
+    attachmentPickerGeneration=attachments.generation;
     Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT)
       .addCategory(Intent.CATEGORY_OPENABLE)
-      .setType("*/*");
+      .setType("*/*").putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);
     startActivityForResult(intent, IMPORT);
   }
 
@@ -1010,7 +1060,7 @@ public final class MainActivity extends Activity {
           try {
             String path = rows.getJSONObject(which).getString("path");
             sheet(new File(path).getName(), "选择如何使用这份文件", new String[] { "添加到消息", "导出到手机" }, action -> {
-              if (action == 0) { returnToChat(); input.append("\n请处理工作区文件：" + path + "\n"); }
+              if (action == 0) { returnToChat(); attachments.addPath(path); }
               else {
                 exportPath = path;
                 startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
@@ -1026,34 +1076,22 @@ public final class MainActivity extends Activity {
   @Override
   protected void onActivityResult(int request, int result, Intent data) {
     super.onActivityResult(request, result, data);
-    if (result != RESULT_OK || data == null || data.getData() == null) return;
+    if (result != RESULT_OK || data == null) return;
+    if(request==IMPORT||request==IMPORT_IMAGE){
+      if(attachmentPickerGeneration!=attachments.generation)return;
+      ArrayList<Uri> uris=new ArrayList<>();
+      if(data.getClipData()!=null)for(int n=0;n<data.getClipData().getItemCount();n++)uris.add(data.getClipData().getItemAt(n).getUri());
+      else if(data.getData()!=null)uris.add(data.getData());
+      if(uris.size()+attachments.pending.size()>8){toast("每条消息最多添加 8 个附件");return;}
+      attachments.importUris(uris);return;
+    }
+    if(data.getData()==null)return;
     Uri uri = data.getData();
     io.execute(() -> {
       try {
         FileTools tools = new FileTools(this);
         if(request==MessageActions.SAVE_MARKDOWN) {
           messageActions.saveTo(uri);
-        } else if (request == IMPORT) {
-          String name = "导入文件.txt";
-          try (
-            Cursor c = getContentResolver().query(
-              uri,
-              new String[] { OpenableColumns.DISPLAY_NAME },
-              null,
-              null,
-              null
-            )
-          ) {
-            if (c != null && c.moveToFirst()) name = c.getString(0);
-          }
-          String saved;
-          try (InputStream in = getContentResolver().openInputStream(uri)) {
-            saved = tools.importFile(in, name);
-          }
-          runOnUiThread(() -> {
-            input.append("\n请处理工作区文件：" + saved + "\n");
-            Toast.makeText(this, "已导入 " + saved, Toast.LENGTH_SHORT).show();
-          });
         } else if (request == EXPORT) {
           try (
             InputStream in = new FileInputStream(tools.resolve(exportPath));

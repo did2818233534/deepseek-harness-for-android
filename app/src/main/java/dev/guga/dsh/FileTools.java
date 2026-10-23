@@ -50,7 +50,7 @@ final class FileTools {
     if (files == null) return;
     Arrays.sort(files, Comparator.comparing(File::getName));
     for (File f : files) {
-      if (f.getName().startsWith(".dsh-")) continue;
+      if (f.getName().startsWith(".dsh-") || f.getName().equals(".attachments")) continue;
       if (f.isDirectory()) listDir(f, out, depth + 1);
       else out.put(
         new JSONObject()
