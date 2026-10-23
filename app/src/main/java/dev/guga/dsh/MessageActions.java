@@ -16,6 +16,7 @@ final class MessageActions {
   final LinearLayout bar;
   final TextView count;
   final Button share,save,fork,all;
+  Button copy;
   String pendingExport="";
   boolean selecting;
   MessageActions(MainActivity host,LinearLayout root,View composer) {
@@ -25,7 +26,7 @@ final class MessageActions {
     count=host.label("",14,host.muted);count.setPadding(host.dp(8),0,0,0);heading.addView(count,new LinearLayout.LayoutParams(0,-2,1));
     ImageButton close=new ImageButton(host);close.setImageResource(R.drawable.ic_close);close.setColorFilter(UiStyle.MUTED);close.setBackground(host.ui.surface(android.graphics.Color.TRANSPARENT,24));close.setContentDescription("取消选择");close.setOnClickListener(v->clear());heading.addView(close,new LinearLayout.LayoutParams(host.dp(48),host.dp(48)));
     LinearLayout row=host.row();bar.addView(row);
-    all=action(row,"全选",R.drawable.ic_select_all,v->selectAll());share=action(row,"分享",R.drawable.ic_share,v->export(false));save=action(row,"保存",R.drawable.ic_download,v->export(true));fork=action(row,"分支",R.drawable.ic_branch,v->fork());
+    all=action(row,"全选",R.drawable.ic_select_all,v->selectAll());copy=action(row,"复制",R.drawable.ic_copy,v->copySelected());share=action(row,"分享",R.drawable.ic_share,v->export(false));save=action(row,"保存",R.drawable.ic_download,v->export(true));fork=action(row,"分支",R.drawable.ic_branch,v->fork());
     root.addView(bar);bar.setVisibility(View.GONE);
   }
   Button action(LinearLayout row,String title,int icon,View.OnClickListener listener) {
@@ -53,7 +54,7 @@ final class MessageActions {
   void refresh(){bar.setVisibility(active()?View.VISIBLE:View.GONE);host.composer.setVisibility(active()?View.GONE:View.VISIBLE);
     count.setText("已选择 "+selected.size()+" 条消息");updateForkEnabled();
     LinkedHashSet<String> ids=selectableIds();all.setText(!ids.isEmpty()&&selected.containsAll(ids)?"取消全选":"全选");
-    for(Button b:new Button[]{share,save}){b.setEnabled(!selected.isEmpty());b.setAlpha(selected.isEmpty()?.4f:1f);}
+    for(Button b:new Button[]{share,save,copy}){b.setEnabled(!selected.isEmpty());b.setAlpha(selected.isEmpty()?.4f:1f);}
     for(ChatTurnView view:host.turnViews.values())view.selection();
     if(active())((android.view.inputmethod.InputMethodManager)host.getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(host.input.getWindowToken(),0);
   }
@@ -65,6 +66,19 @@ final class MessageActions {
     try {host.request("/session/fork",new JSONObject().put("turnId",key.substring(0,slash)).put("includeAssistant",key.endsWith("/a")),()->{clear();host.revision=-1;host.currentId="";host.toast("已创建分支，原对话已保留");});}
     catch(Exception e){host.toast(e.getMessage());}
   }
+  String selectedSource(){
+    StringBuilder out=new StringBuilder();
+    for(Map.Entry<String,ChatTurnView> entry:host.turnViews.entrySet()){
+      ChatTurnView v=entry.getValue();
+      if(selected.contains(entry.getKey()+"/u")){if(out.length()>0)out.append("\n\n");out.append(v.user.getText()).append(v.attachmentSummary());}
+      if(selected.contains(entry.getKey()+"/a")){if(out.length()>0)out.append("\n\n");out.append(v.markdown.source==null?"":v.markdown.source).append(v.outputSummary());}
+    }return out.toString();
+  }
+  void copySelected(){
+    ((ClipboardManager)host.getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("Markdown",selectedSource()));
+    copy.setText("已复制");copy.removeCallbacks(resetCopy);copy.postDelayed(resetCopy,1600);
+  }
+  final Runnable resetCopy=()->{if(copy!=null)copy.setText("复制");};
   String markdown(){
     StringBuilder md=new StringBuilder("# ").append(host.chatTitle.getText().toString().replace('\n',' ')).append("\n\n");
     for(Map.Entry<String,ChatTurnView> entry:host.turnViews.entrySet()){

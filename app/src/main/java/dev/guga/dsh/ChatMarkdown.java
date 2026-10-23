@@ -19,6 +19,8 @@ final class ChatMarkdown {
   String source;
   boolean plain;
   ChatMarkdown(Context context) {
+    MainActivity host=context instanceof MainActivity?(MainActivity)context:null;
+    if(host!=null&&host.markdownRenderer!=null){renderer=host.markdownRenderer;return;}
     renderer=Markwon.builder(context)
       .usePlugin(new io.noties.markwon.AbstractMarkwonPlugin(){
         @Override public void configureTheme(io.noties.markwon.core.MarkwonTheme.Builder b){
@@ -35,6 +37,7 @@ final class ChatMarkdown {
         .tableCellPadding((int)(8*context.getResources().getDisplayMetrics().density))
         .tableHeaderRowBackgroundColor(0xFFE8E1F0).tableOddRowBackgroundColor(0x0C6750A4)))
       .usePlugin(TaskListPlugin.create(context)).build();
+    if(host!=null)host.markdownRenderer=renderer;
   }
   void update(TextView view,String markdown) {
     if(!markdown.equals(source)) {

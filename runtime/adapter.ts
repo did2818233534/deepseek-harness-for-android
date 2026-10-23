@@ -55,7 +55,7 @@ export class AndroidAdapter extends LlmAdapter {
       stream: true,
     };
     if (options.tools?.length)
-      body.tools = options.tools.map((t) => ({
+      body.tools = options.tools.filter(t=>!(t.name==="web_search"&&this.settings().webSearch===false)&&!(t.name==="web_fetch"&&this.settings().webFetch===false)).map((t) => ({
         type: "function",
         function: t,
       }));

@@ -21944,10 +21944,10 @@ Schema.prototype.volatile = function volatile() {
 var resolvers = {};
 var checkedVolatile = /* @__PURE__ */Symbol("checked-volatile-schema");
 function validateVolatileSchema(schema, path4 = [], blocked = false, seen = /* @__PURE__ */new Map()) {
-  const states = seen.get(schema) ?? /* @__PURE__ */new Set();
-  if (states.has(blocked)) return;
-  states.add(blocked);
-  seen.set(schema, states);
+  const states2 = seen.get(schema) ?? /* @__PURE__ */new Set();
+  if (states2.has(blocked)) return;
+  states2.add(blocked);
+  seen.set(schema, states2);
   if (schema.meta?.volatile && blocked) {
     throw new ValidationError2("volatile fields require a fixed object path without an enclosing volatile field", {
       path: path4
@@ -24171,7 +24171,7 @@ var ConversationTitles = class {
   changed;
   pending = /* @__PURE__ */new Map();
   title(id) {
-    return this.ctx.sessionPersistence.load(id).title;
+    return this.ctx.sessionPersistence.summary(id).title;
   }
   cancel(id) {
     this.pending.get(id)?.abort();
@@ -24180,7 +24180,7 @@ var ConversationTitles = class {
     const id = agent.id;
     if (this.pending.has(id)) return;
     const store = this.ctx.sessionPersistence;
-    const saved = store.load(id);
+    const saved = store.summary(id);
     if (saved.title || saved.titleAttempted) return;
     const events = agent.session.snapshotEvents();
     const first = events.find(e => e.type === "user/message" && e.data.source?.kind === "user");
@@ -24232,7 +24232,7 @@ var ConversationTitles = class {
 };
 
 // runtime/presentation.ts
-function presentTurns(events, liveFrames2, busy2) {
+function presentTurns(events, liveFrames, busy) {
   const turns = [];
   let turn;
   let processStart = 0,
@@ -24357,10 +24357,10 @@ function presentTurns(events, liveFrames2, busy2) {
     }
   }
   if (turn) {
-    for (const frame of liveFrames2) chunk(frame.chunk, frame.time, true);
-    turn.busy = busy2;
-    if (busy2 && processStart) turn.processElapsedMs = processTotal + Math.max(0, Date.now() - processStart);
-    if (!busy2 && processStart) closeProcess(turn.endedAt || Date.now());
+    for (const frame of liveFrames) chunk(frame.chunk, frame.time, true);
+    turn.busy = busy;
+    if (busy && processStart) turn.processElapsedMs = processTotal + Math.max(0, Date.now() - processStart);
+    if (!busy && processStart) closeProcess(turn.endedAt || Date.now());
   }
   return turns.slice(-150);
 }
@@ -26424,11 +26424,11 @@ var SessionStore = class extends Service {
       if (session === void 0) throw new SessionForkError(`session "${source}" not found`, "SESSION_NOT_FOUND");
       return session;
     }
-    const live2 = this.get(source.id);
-    if (live2 === void 0) {
+    const live = this.get(source.id);
+    if (live === void 0) {
       throw new SessionForkError(`session "${source.id}" not found`, "SESSION_NOT_FOUND");
     }
-    if (live2 !== source) throw new SessionForkError(`session "${source.id}" is not the live store instance`, "SESSION_NOT_LIVE");
+    if (live !== source) throw new SessionForkError(`session "${source.id}" is not the live store instance`, "SESSION_NOT_LIVE");
     return source;
   }
 };
@@ -26494,10 +26494,10 @@ var SessionProjectionRegistry = class extends Service {
         existing.refs += 1;
       }
       yield () => {
-        const live2 = this.registrations.get(key);
-        if (live2 === void 0) return;
-        live2.refs -= 1;
-        if (live2.refs === 0) this.registrations.delete(key);
+        const live = this.registrations.get(key);
+        if (live === void 0) return;
+        live.refs -= 1;
+        if (live.refs === 0) this.registrations.delete(key);
       };
     }.bind(this), "sessionProjections.register()");
     return dispose;
@@ -28194,14 +28194,14 @@ var PtcCalls = class {
 
 // vendor/harness/packages/core/tools/src/ptc.ts
 var RUN_CODE_NAME = "run_code";
-function runCodeFlavor(language, execution = {
+function runCodeFlavor(language, execution2 = {
   programDescription: "the program to execute",
   outputInstruction: "Curate the program output.",
   codeDescription: `The ${language} program to execute, following this tool's execution instructions.`
 }) {
   return {
-    description: `Execute a ${language} program against the available tools. Takes two required arguments: \`code\`, ${execution.programDescription}, and \`description\`, a short summary of what the program does. Call tools as \`await tools.name(args)\` per the declarations in the system prompt. ${execution.outputInstruction} Image-bearing subtool results are attached after the run.`,
-    codeDescription: execution.codeDescription
+    description: `Execute a ${language} program against the available tools. Takes two required arguments: \`code\`, ${execution2.programDescription}, and \`description\`, a short summary of what the program does. Call tools as \`await tools.name(args)\` per the declarations in the system prompt. ${execution2.outputInstruction} Image-bearing subtool results are attached after the run.`,
+    codeDescription: execution2.codeDescription
   };
 }
 var TYPESCRIPT_FLAVOR = runCodeFlavor("TypeScript");
@@ -30062,14 +30062,14 @@ var ToolRuntime = class extends Service {
       if (detached === void 0) {
         throw new TypeError("tool execution arguments must be losslessly JSON-serializable");
       }
-      const execution = {
+      const execution2 = {
         ...base,
         arguments: deepFreeze(detached)
       };
-      this.deferredContexts.set(execution, deferredContexts);
-      this.contentFinalizers.set(execution, finalizerFor());
-      if (!collapsed) this.contentProjectors.set(execution, capturedProjector);
-      this.cancellationStates.set(execution, {
+      this.deferredContexts.set(execution2, deferredContexts);
+      this.contentFinalizers.set(execution2, finalizerFor());
+      if (!collapsed) this.contentProjectors.set(execution2, capturedProjector);
+      this.cancellationStates.set(execution2, {
         callerSignal: signal,
         bodyInvoked: false
       });
@@ -30077,29 +30077,29 @@ var ToolRuntime = class extends Service {
         if (signal.aborted) {
           return {
             kind: "final-result",
-            exec: execution,
+            exec: execution2,
             result: toolAbortedBeforeDispatchResult()
           };
         }
         return {
           kind: "final-result",
-          exec: execution,
+          exec: execution2,
           result: toolErrorResult(new ToolNotFoundError(name3, `only \`${RUN_CODE_NAME}\` is callable directly \u2014 call \`${name3}\` from inside a \`${RUN_CODE_NAME}\` program instead`))
         };
       }
       return {
         kind: "ready",
-        exec: execution
+        exec: execution2
       };
     } catch (error51) {
-      const execution = {
+      const execution2 = {
         ...base,
         arguments: void 0
       };
-      this.contentFinalizers.set(execution, finalizerFor());
+      this.contentFinalizers.set(execution2, finalizerFor());
       return {
         kind: "final-result",
-        exec: execution,
+        exec: execution2,
         result: toolErrorResult(error51)
       };
     }
@@ -49614,7 +49614,7 @@ var ReactLoopAgent = class {
         turn,
         step
       }, startsRequestSeries, signal);
-      const live2 = new AssistantStreamAttempt(this.session.id, ++this.assistantAttemptCounter, () => ++this.assistantStreamRevision, turn, step, frame => {
+      const live = new AssistantStreamAttempt(this.session.id, ++this.assistantAttemptCounter, () => ++this.assistantStreamRevision, turn, step, frame => {
         this.dispatch.emit("agent/assistant-stream", {
           frame
         });
@@ -49623,20 +49623,20 @@ var ReactLoopAgent = class {
       try {
         const stream = preparedCall?.stream(request) ?? this.loopCtx.llm.stream(request);
         signal.throwIfAborted();
-        live2.start();
+        live.start();
         started = true;
         for await (const chunk of stream) {
           signal.throwIfAborted();
-          live2.push(chunk);
+          live.push(chunk);
         }
         signal.throwIfAborted();
       } catch (error51) {
         if (!started) throw error51;
         try {
           if (signal.aborted) {
-            const content = live2.interruptedBlocks();
+            const content = live.interruptedBlocks();
             if (content.length > 0) {
-              live2.settle("assistant/message", () => this.session.append("assistant/message", {
+              live.settle("assistant/message", () => this.session.append("assistant/message", {
                 turn,
                 step,
                 message: createAssistantMessage({
@@ -49644,31 +49644,31 @@ var ReactLoopAgent = class {
                   source: {
                     provider: request.provider,
                     model: request.model,
-                    ...(live2.replayState === void 0 ? {} : {
-                      replayState: live2.replayState
+                    ...(live.replayState === void 0 ? {} : {
+                      replayState: live.replayState
                     })
                   }
                 }),
                 interrupted: true,
-                ...(live2.usage === void 0 ? {} : {
-                  usage: live2.usage
+                ...(live.usage === void 0 ? {} : {
+                  usage: live.usage
                 }),
-                stream: live2.stream
+                stream: live.stream
               }, {
                 surfaceOp: "append"
               }).seq);
             } else {
-              live2.settle("assistant/attempt", () => this.session.append("assistant/attempt", {
+              live.settle("assistant/attempt", () => this.session.append("assistant/attempt", {
                 turn,
                 step,
-                stream: live2.stream
+                stream: live.stream
               }).seq);
             }
           } else {
-            live2.settle("assistant/attempt", () => this.session.append("assistant/attempt", {
+            live.settle("assistant/attempt", () => this.session.append("assistant/attempt", {
               turn,
               step,
-              stream: live2.stream
+              stream: live.stream
             }).seq);
           }
         } catch (settlementError) {
@@ -49679,12 +49679,12 @@ var ReactLoopAgent = class {
         throw error51;
       }
       try {
-        const finish = live2.finish;
+        const finish = live.finish;
         if (finish.kind === "error" || finish.kind === "aborted") {
-          live2.settle("assistant/attempt", () => this.session.append("assistant/attempt", {
+          live.settle("assistant/attempt", () => this.session.append("assistant/attempt", {
             turn,
             step,
-            stream: live2.stream
+            stream: live.stream
           }).seq);
           const action = await this.dispatch.waterfall("agent/request-error", {
             turn,
@@ -49701,23 +49701,23 @@ var ReactLoopAgent = class {
           continue;
         }
         const message = createAssistantMessage({
-          content: live2.blocks(),
+          content: live.blocks(),
           source: {
             provider: request.provider,
             model: request.model,
-            ...(live2.replayState !== void 0 ? {
-              replayState: live2.replayState
+            ...(live.replayState !== void 0 ? {
+              replayState: live.replayState
             } : {})
           }
         });
-        live2.settle("assistant/message", () => this.session.append("assistant/message", {
+        live.settle("assistant/message", () => this.session.append("assistant/message", {
           turn,
           step,
           message,
-          ...(live2.usage === void 0 ? {} : {
-            usage: live2.usage
+          ...(live.usage === void 0 ? {} : {
+            usage: live.usage
           }),
-          stream: live2.stream
+          stream: live.stream
         }, {
           surfaceOp: "append"
         }).seq);
@@ -49735,7 +49735,7 @@ var ReactLoopAgent = class {
           kind: "completed"
         } : null;
       } catch (error51) {
-        if (!live2.ended) live2.abandon();
+        if (!live.ended) live.abandon();
         throw error51;
       }
     }
@@ -51612,6 +51612,7 @@ var import_node_http = __toESM(require("node:http"));
 var import_node_fs3 = __toESM(require("node:fs"));
 var import_node_path4 = __toESM(require("node:path"));
 var import_node_crypto5 = __toESM(require("node:crypto"));
+var import_node_async_hooks2 = require("node:async_hooks");
 
 // runtime/storage.ts
 var import_node_fs2 = __toESM(require("node:fs"));
@@ -51619,6 +51620,25 @@ var import_node_path3 = __toESM(require("node:path"));
 var AndroidSessions = class _AndroidSessions extends SessionPersistence {
   static root = "";
   owners = /* @__PURE__ */new Set();
+  summaries = /* @__PURE__ */new Map();
+  remember(id, data) {
+    const first = data.events.find(e => e.type === "user/message");
+    const summary = {
+      header: data.header,
+      eventCount: data.events.length,
+      revision: String(data.events.length),
+      title: data.title,
+      titleAttempted: data.titleAttempted,
+      archived: data.archived === true,
+      hasMessages: !!first,
+      fallbackTitle: first?.data.source?.userText?.slice(0, 45) || first?.data.source?.attachments?.[0]?.name || first?.data.content?.find(b => b.type === "text")?.text?.slice(0, 45) || "\u65B0\u5BF9\u8BDD"
+    };
+    this.summaries.set(id, summary);
+    return summary;
+  }
+  summary(id) {
+    return this.summaries.get(id) || this.remember(id, this.load(id));
+  }
   failure = null;
   constructor(ctx) {
     super(ctx);
@@ -51653,7 +51673,9 @@ var AndroidSessions = class _AndroidSessions extends SessionPersistence {
   }
   load(id) {
     try {
-      return JSON.parse(import_node_fs2.default.readFileSync(this.file(id), "utf8"));
+      const data = JSON.parse(import_node_fs2.default.readFileSync(this.file(id), "utf8"));
+      this.remember(id, data);
+      return data;
     } catch (e) {
       if (e.code === "ENOENT") throw new SessionPersistenceNotFoundError(id);
       throw e;
@@ -51669,6 +51691,7 @@ var AndroidSessions = class _AndroidSessions extends SessionPersistence {
       import_node_fs2.default.closeSync(fd);
     }
     import_node_fs2.default.renameSync(p + ".tmp", p);
+    this.remember(id, data);
     const dir = import_node_fs2.default.openSync(_AndroidSessions.root, "r");
     try {
       import_node_fs2.default.fsyncSync(dir);
@@ -51740,6 +51763,7 @@ var AndroidSessions = class _AndroidSessions extends SessionPersistence {
     this.load(id);
     import_node_fs2.default.unlinkSync(this.file(id));
     this.owners.delete(id);
+    this.summaries.delete(id);
     const dir = import_node_fs2.default.openSync(_AndroidSessions.root, "r");
     try {
       import_node_fs2.default.fsyncSync(dir);
@@ -51752,11 +51776,11 @@ var AndroidSessions = class _AndroidSessions extends SessionPersistence {
   }
   async stat(id) {
     try {
-      const d = this.load(id);
+      const d = this.summary(id);
       return {
         header: d.header,
-        eventCount: d.events.length,
-        revision: String(d.events.length)
+        eventCount: d.eventCount,
+        revision: d.revision
       };
     } catch (e) {
       if (e instanceof SessionPersistenceNotFoundError) return void 0;
@@ -51831,7 +51855,7 @@ var AndroidAdapter = class extends LlmAdapter {
       messages,
       stream: true
     };
-    if (options.tools?.length) body.tools = options.tools.map(t => ({
+    if (options.tools?.length) body.tools = options.tools.filter(t => !(t.name === "web_search" && this.settings().webSearch === false) && !(t.name === "web_fetch" && this.settings().webFetch === false)).map(t => ({
       type: "function",
       function: t
     }));
@@ -51990,14 +52014,39 @@ var [root, bridgePort, token] = process.argv.slice(2);
 if (!root || !bridgePort || !token) throw Error("Missing Android bridge arguments");
 var settings = {};
 var active = null;
-var busy = false;
-var live = "";
-var liveReasoning = "";
-var lastError = "";
 var revision = 0;
-var steps = 0;
 var agents = /* @__PURE__ */new Map();
-var liveFrames = [];
+var states = /* @__PURE__ */new Map();
+var execution = new import_node_async_hooks2.AsyncLocalStorage();
+function stateOf(id = active?.id) {
+  if (!states.has(id)) states.set(id, {
+    busy: false,
+    live: "",
+    liveReasoning: "",
+    lastError: "",
+    steps: 0,
+    liveFrames: [],
+    settings: {
+      ...settings
+    },
+    question: "",
+    sessionId: id,
+    pendingGuidance: [],
+    revision: 0
+  });
+  return states.get(id);
+}
+function anyBusy() {
+  return [...states.values()].some(s => s.busy);
+}
+var statusChain = Promise.resolve();
+function publishStatus() {
+  const busy = anyBusy();
+  statusChain = statusChain.catch(() => {}).then(() => bridge("/status", {
+    busy
+  }));
+  return statusChain;
+}
 async function bridge(route, body = {}, signal, raw = false) {
   const response = await fetch(`http://127.0.0.1:${bridgePort}${route}`, {
     method: "POST",
@@ -52057,9 +52106,11 @@ async function main() {
   await ctx.plugin(src_default8);
   await ctx.plugin(src_default10);
   await ctx.plugin(src_default9);
-  configureWebTransport(bridge);
+  configureWebTransport((route, body, signal) => bridge(route, {
+    ...body,
+    sessionId: execution.getStore()?.sessionId
+  }, signal));
   await ctx.plugin(src_default12);
-  let originalQuestion = "";
   const auth = () => ({
     baseURL: "https://api.deepseek.com/v1/tools",
     resolveApiKey: async () => void 0
@@ -52067,22 +52118,14 @@ async function main() {
   ctx.web.registerSearchProvider(new DeepSeekSearchApiProvider(() => ({
     ...auth(),
     count: 10,
-    originalQuestion: () => originalQuestion
+    originalQuestion: () => execution.getStore()?.question || ""
   })));
   ctx.web.registerFetchProvider(new DeepSeekFetchApiProvider(auth));
-  let webTools,
-    webKey = "";
-  async function refreshWebTools() {
-    const key = `${settings.webSearch !== false}/${settings.webFetch !== false}`;
-    if (webKey === key) return;
-    if (webTools) await webTools.dispose();
-    webTools = await ctx.plugin(src_exports2, {
-      search: settings.webSearch !== false,
-      fetch: settings.webFetch !== false
-    });
-    webKey = key;
-  }
-  await refreshWebTools();
+  await ctx.plugin(src_exports2, {
+    search: true,
+    fetch: true
+  });
+  ctx.on("tools/execute", (exec, next) => execution.run(stateOf(exec.agent?.id), next));
   ctx.llm.registerAdapter(["android"], new AndroidAdapter(bridge, () => settings, import_node_path4.default.join(root, "..", "workspace")));
   for (const [name3, description, parameters] of toolSpecs) ctx.tools.register(defineTool({
     name: name3,
@@ -52104,7 +52147,9 @@ async function main() {
       }, exec.signal);
     }
   }));
-  ctx.on("agent/request", async (_payload, next) => {
+  ctx.on("agent/request", async ({
+    agent
+  }, next) => {
     const config2 = await next();
     const {
       maxTokens: _legacyCap,
@@ -52112,8 +52157,8 @@ async function main() {
     } = config2;
     return {
       ...current,
-      provider: "android",
-      model: settings.model
+      provider: "android-" + agent.id,
+      model: stateOf(agent.id).settings.model
     };
   });
   const titles = new ConversationTitles(ctx, () => {
@@ -52123,61 +52168,55 @@ async function main() {
     agent,
     status
   }) => {
-    if (status === "idle") void titles.generate(agent, agent.options.model || settings.model).catch(() => {});
-    if (agent === active) {
-      busy = status !== "idle";
-      revision++;
-      if (!busy) {
-        live = "";
-        liveReasoning = "";
-        void ctx.sessionPersistence.flush().catch(e => {
-          lastError = "\u4F1A\u8BDD\u4FDD\u5B58\u5931\u8D25\uFF1A" + e.message;
-          revision++;
-        });
-        void bridge("/status", {
-          busy: false
-        }).catch(() => {});
-      }
-    }
-  });
-  ctx.on("session/event", (session, event) => {
+    const state = stateOf(agent.id);
+    state.busy = status !== "idle";
+    state.revision++;
     revision++;
-    if (event.type === "step/start") {
-      steps++;
-      if (steps > settings.maxSteps) active?.cancel({
-        kind: "hook",
-        reason: "\u5DF2\u8FBE\u5230\u672C\u8F6E\u5DE5\u5177\u6B65\u9AA4\u4E0A\u9650\uFF0C\u8BF7\u7EE7\u7EED\u5BF9\u8BDD\u3002"
+    if (!state.busy) {
+      state.live = "";
+      state.liveReasoning = "";
+      state.liveFrames = [];
+      void titles.generate(agent, state.settings.model).catch(() => {});
+      void ctx.sessionPersistence.flush().catch(e => {
+        state.lastError = "\u4F1A\u8BDD\u4FDD\u5B58\u5931\u8D25\uFF1A" + e.message;
+        state.revision++;
+        revision++;
       });
     }
-    if (event.type === "turn/end" && event.data.reason.kind !== "completed" && event.data.reason.kind !== "canceled") lastError = JSON.stringify(event.data.reason);
+    void publishStatus().catch(() => {});
+  });
+  ctx.on("session/event", (session, event) => {
+    const state = stateOf(session.id);
+    state.revision++;
+    revision++;
+    if (event.type === "user/message" && event.data.source?.steerId) state.pendingGuidance = state.pendingGuidance.filter(x => x.id !== event.data.source.steerId);
+    if (event.type === "step/start") state.steps++;
+    if (event.type === "turn/end" && !["completed", "canceled"].includes(event.data.reason.kind)) state.lastError = JSON.stringify(event.data.reason);
   });
   ctx.on("agent/assistant-stream", ({
+    agent,
     frame
   }) => {
-    if (frame.type === "start") {
-      liveFrames = [];
-      live = "";
-      liveReasoning = "";
+    const state = stateOf(agent.id);
+    state.revision++;
+    if (frame.type === "start" || frame.type === "end") {
+      state.liveFrames = [];
+      state.live = "";
+      state.liveReasoning = "";
     }
     if (frame.type === "chunk") {
-      liveFrames.push(frame);
-      if (frame.chunk.type === "text-delta") live += frame.chunk.text;
-      if (frame.chunk.type === "reasoning-delta") liveReasoning += frame.chunk.text;
-    }
-    if (frame.type === "end") {
-      liveFrames = [];
-      live = "";
-      liveReasoning = "";
+      state.liveFrames.push(frame);
+      if (frame.chunk.type === "text-delta") state.live += frame.chunk.text;
+      if (frame.chunk.type === "reasoning-delta") state.liveReasoning += frame.chunk.text;
     }
     revision++;
   });
   async function select(id) {
-    if (busy) throw Error("\u8BF7\u5148\u505C\u6B62\u5F53\u524D\u4EFB\u52A1");
     settings = await bridge("/settings");
-    if (id && !(await ctx.sessionPersistence.stat(id))) throw Error("\u5BF9\u8BDD\u4E0D\u5B58\u5728\u6216\u5DF2\u5220\u9664");
+    const info = id && !agents.has(id) ? await ctx.sessionPersistence.stat(id) : void 0;
+    if (id && !agents.has(id) && !info) throw Error("\u5BF9\u8BDD\u4E0D\u5B58\u5728\u6216\u5DF2\u5220\u9664");
     if (!id) id = import_node_crypto5.default.randomUUID();
     if (!agents.has(id)) {
-      const info = await ctx.sessionPersistence.stat(id);
       const a = info ? (await ctx.agents.resume({
         resumeSessionId: SessionId(id),
         agentOptions: {
@@ -52191,7 +52230,14 @@ async function main() {
       agents.set(id, a);
     }
     active = agents.get(id);
-    lastError = "";
+    const state = stateOf(id);
+    if (!state.registered) {
+      ctx.llm.registerAdapter(["android-" + id], new AndroidAdapter((route, body, signal, raw) => bridge(route, {
+        ...body,
+        sessionId: id
+      }, signal, raw), () => state.settings, import_node_path4.default.join(root, "..", "workspace")));
+      state.registered = true;
+    }
     revision++;
     import_node_fs3.default.writeFileSync(import_node_path4.default.join(root, "current"), id);
     return {
@@ -52224,36 +52270,50 @@ async function main() {
       const body = Buffer.concat(chunks).toString("utf8");
       const data = body ? JSON.parse(body) : {};
       let out;
+      const state = stateOf();
       switch (req.url) {
         case "/state":
-          out = {
-            id: active.session.id,
-            isBranch: !!active.session.header.parentSession,
-            title: titles.title(active.id) || "",
-            turns: presentTurns(active.session.snapshotEvents(), liveFrames, busy),
-            busy,
-            live,
-            liveReasoning,
-            lastError,
-            revision,
-            model: settings.model,
-            events: active.session.snapshotEvents().filter(e => ["user/message", "assistant/message", "tool/call", "tool/result", "turn/end"].includes(e.type)).slice(-150).map(e => ({
-              type: e.type,
-              data: e.type === "assistant/message" ? {
-                message: e.data.message
-              } : e.data
-            }))
-          };
-          break;
+          {
+            const title = titles.title(active.id) || "";
+            const stamp = JSON.stringify([active.id, state.revision, title, settings.model, [...states.values()].filter(s => s.busy).length]);
+            if (!state.busy && data.stamp === stamp) {
+              out = {
+                unchanged: true
+              };
+              break;
+            }
+            const events = active.session.snapshotEvents();
+            out = {
+              stamp,
+              id: active.session.id,
+              isBranch: !!active.session.header.parentSession,
+              title,
+              turns: presentTurns(events, state.liveFrames, state.busy),
+              busy: state.busy,
+              live: state.live,
+              liveReasoning: state.liveReasoning,
+              lastError: state.lastError,
+              pendingGuidance: state.pendingGuidance,
+              runningCount: [...states.values()].filter(s => s.busy).length,
+              revision,
+              model: state.busy ? state.settings.model : settings.model,
+              events: data.compact ? void 0 : events.filter(e => ["user/message", "assistant/message", "tool/call", "tool/result", "turn/end"].includes(e.type)).slice(-150).map(e => ({
+                type: e.type,
+                data: e.type === "assistant/message" ? {
+                  message: e.data.message
+                } : e.data
+              }))
+            };
+            break;
+          }
         case "/sessions":
           out = {
             sessions: (await ctx.sessionPersistence.list()).map(s => {
-              const d = ctx.sessionPersistence.load(s.header.id);
-              const first = d.events.find(e => e.type === "user/message");
-              if (!first) return null;
+              const d = ctx.sessionPersistence.summary(s.header.id);
+              if (!d.hasMessages) return null;
               return {
                 id: s.header.id,
-                title: (d.title || first?.data.source?.userText?.slice(0, 45) || first?.data.source?.attachments?.[0]?.name || first?.data.content?.find(b => b.type === "text")?.text?.slice(0, 45) || "\u65B0\u5BF9\u8BDD") + (s.header.parentSession ? " \xB7 \u5206\u652F" : ""),
+                title: (d.title || d.fallbackTitle) + (s.header.parentSession ? " \xB7 \u5206\u652F" : ""),
                 isBranch: !!s.header.parentSession,
                 createdAt: s.header.createdAt,
                 archived: d.archived === true
@@ -52263,7 +52323,7 @@ async function main() {
           break;
         case "/session/fork":
           {
-            if (busy) throw Error("\u8BF7\u5148\u505C\u6B62\u5F53\u524D\u4EFB\u52A1\uFF0C\u518D\u521B\u5EFA\u5206\u652F");
+            if (state.busy) throw Error("\u8BF7\u5148\u505C\u6B62\u5F53\u524D\u4EFB\u52A1\uFF0C\u518D\u521B\u5EFA\u5206\u652F");
             if (typeof data.turnId !== "string" || typeof data.includeAssistant !== "boolean") throw Error("\u5206\u652F\u6D88\u606F\u65E0\u6548");
             const source = active.session;
             const events = source.snapshotEvents();
@@ -52302,7 +52362,6 @@ async function main() {
           }
         case "/session/archive":
           {
-            if (busy) throw Error("\u8BF7\u5148\u505C\u6B62\u5F53\u524D\u4EFB\u52A1\uFF0C\u518D\u7BA1\u7406\u5BF9\u8BDD");
             if (typeof data.archived !== "boolean") throw Error("\u5F52\u6863\u72B6\u6001\u65E0\u6548");
             ctx.sessionPersistence.setArchived(data.id, data.archived);
             if (data.archived && active?.id === data.id) await select();
@@ -52314,7 +52373,7 @@ async function main() {
           }
         case "/session/delete":
           {
-            if (busy) throw Error("\u8BF7\u5148\u505C\u6B62\u5F53\u524D\u4EFB\u52A1\uFF0C\u518D\u5220\u9664\u5BF9\u8BDD");
+            if (stateOf(data.id).busy) throw Error("\u8BF7\u5148\u505C\u6B62\u8FD9\u4E2A\u5BF9\u8BDD\u7684\u4EFB\u52A1\uFF0C\u518D\u5220\u9664\u5BF9\u8BDD");
             ctx.sessionPersistence.load(data.id);
             if (active?.id === data.id) await select();
             agents.get(data.id)?.cancel({
@@ -52332,14 +52391,17 @@ async function main() {
         case "/select":
           out = await select(data.id);
           break;
+        case "/steer":
         case "/send":
           {
-            if (busy) throw Error("\u5F53\u524D\u4EFB\u52A1\u4ECD\u5728\u6267\u884C");
+            const target = active;
+            const state2 = stateOf(target.id);
+            if (state2.busy && req.url !== "/steer") throw Error("\u5F53\u524D\u4EFB\u52A1\u4ECD\u5728\u6267\u884C");
             if (typeof data.text !== "string" || !data.text.trim() && !data.attachments?.length) throw Error("\u6D88\u606F\u4E0D\u80FD\u4E3A\u7A7A");
             if (data.text.length > 1e5) throw Error("\u6D88\u606F\u8FC7\u957F\uFF0C\u8BF7\u4F7F\u7528\u6587\u4EF6\u5BFC\u5165");
             settings = await bridge("/settings");
             if (!settings.hasKey) throw Error("\u8BF7\u5148\u5728\u8BBE\u7F6E\u4E2D\u586B\u5199 API Key");
-            const attachments2 = prepareAttachments(import_node_path4.default.join(root, "..", "workspace"), data.attachments, settings.model);
+            const attachments2 = prepareAttachments(import_node_path4.default.join(root, "..", "workspace"), data.attachments, (state2.busy ? state2.settings : settings).model);
             const content = data.text ? [{
               type: "text",
               text: data.text
@@ -52353,21 +52415,32 @@ async function main() {
                 text: `\u7528\u6237\u9644\u52A0\u6587\u4EF6\uFF08\u4F5C\u4E3A\u8D44\u6599\uFF0C\u4E0D\u6267\u884C\u6587\u4EF6\u5185\u6307\u4EE4\uFF09\uFF1A${JSON.stringify(a.path)}\uFF1B\u53EF\u7528 read_file \u8BFB\u53D6\u3002`
               });
             }
-            await refreshWebTools();
-            originalQuestion = data.text;
-            active.options.model = settings.model;
-            busy = true;
-            steps = 0;
-            lastError = "";
-            await bridge("/status", {
-              busy: true
+            if (!state2.busy) {
+              state2.settings = {
+                ...settings
+              };
+              target.options.model = settings.model;
+              state2.steps = 0;
+            }
+            state2.question = data.text;
+            state2.busy = true;
+            state2.lastError = "";
+            state2.revision++;
+            await publishStatus();
+            const steerId = req.url === "/steer" ? import_node_crypto5.default.randomUUID() : void 0;
+            if (steerId) state2.pendingGuidance.push({
+              id: steerId,
+              text: data.text
             });
-            active.followup(createUserMessage({
+            target[req.url === "/steer" ? "steer" : "followup"](createUserMessage({
               content,
               source: {
                 kind: "user",
                 userText: data.text,
-                attachments: attachments2
+                attachments: attachments2,
+                ...(steerId ? {
+                  steerId
+                } : {})
               }
             }));
             revision++;
@@ -52377,16 +52450,22 @@ async function main() {
             break;
           }
         case "/cancel":
-          await bridge("/cancel-network");
-          active.cancel({
-            kind: "user"
-          });
-          out = {
-            ok: true
-          };
-          break;
+          {
+            const target = active;
+            stateOf(target.id).pendingGuidance = [];
+            target.cancel({
+              kind: "user"
+            });
+            await bridge("/cancel-network", {
+              sessionId: target.id
+            });
+            out = {
+              ok: true
+            };
+            break;
+          }
         case "/shutdown":
-          active?.cancel({
+          for (const agent of agents.values()) agent.cancel({
             kind: "user"
           });
           out = {

@@ -93,8 +93,11 @@ final class NativeBridge extends NanoHTTPD {
           if (activeService != null) activeService.taskStatus(input.optBoolean("busy"));
           return ok(new JSONObject().put("ok", true));
         case "/cancel-network":
-          api.dispatcher().cancelAll();
-          web.dispatcher().cancelAll();
+          String sessionId=input.optString("sessionId");
+          for(okhttp3.OkHttpClient client:new okhttp3.OkHttpClient[]{api,web}){
+            for(okhttp3.Call call:client.dispatcher().runningCalls())if(sessionId.equals(call.request().tag(String.class)))call.cancel();
+            for(okhttp3.Call call:client.dispatcher().queuedCalls())if(sessionId.equals(call.request().tag(String.class)))call.cancel();
+          }
           return ok(new JSONObject().put("ok", true));
         case "/web-api":
           return ok(webApi(input));
@@ -155,8 +158,9 @@ final class NativeBridge extends NanoHTTPD {
   }
 
   private Response model(JSONObject input) throws Exception {
+    String sessionId=input.optString("sessionId");input.remove("sessionId");
     okhttp3.Response remote = api
-      .newCall(request(settings.base() + "/chat/completions", input.toString()))
+      .newCall(request(settings.base() + "/chat/completions", input.toString()).newBuilder().tag(String.class,sessionId).build())
       .execute();
     if (!remote.isSuccessful()) {
       String message = remote.body() == null ? "" : remote.body().string();
@@ -212,7 +216,7 @@ final class NativeBridge extends NanoHTTPD {
     boolean fetch = "https://api.deepseek.com/v1/tools/fetch".equals(endpoint);
     if (!search && !fetch) throw new IOException("不支持的联网接口");
     if ((search && !settings.webSearch()) || (fetch && !settings.webFetch())) throw new IOException("此联网工具已关闭");
-    try (okhttp3.Response response = api.newBuilder().callTimeout(30, TimeUnit.SECONDS).build().newCall(request(endpoint, input.getJSONObject("body").toString())).execute()) {
+    try (okhttp3.Response response = api.newBuilder().callTimeout(30, TimeUnit.SECONDS).build().newCall(request(endpoint, input.getJSONObject("body").toString()).newBuilder().tag(String.class,input.optString("sessionId")).build()).execute()) {
       if (!response.isSuccessful()) throw new IOException("DeepSeek 联网接口返回 HTTP " + response.code());
       return new JSONObject(new String(FileTools.readLimited(response.body().byteStream(), 8 * 1024 * 1024), java.nio.charset.StandardCharsets.UTF_8));
     }

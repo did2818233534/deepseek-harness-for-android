@@ -30,9 +30,11 @@ final class SvgMessageContent extends LinearLayout {
     }
     if(from<source.length())out.add(new Part(source.substring(from),false));return out;
   }
-  final ChatTurnView owner;final MainActivity host;final List<Part> rendered=new ArrayList<>();
+  final ChatTurnView owner;final MainActivity host;final List<Part> rendered=new ArrayList<>();String previousSource;
   SvgMessageContent(ChatTurnView owner){super(owner.host);this.owner=owner;host=owner.host;setOrientation(VERTICAL);setBackground(host.ui.bubble(UiStyle.LOW,false));setClipToOutline(true);setVisibility(GONE);}
   boolean update(String source){
+    if(source.equals(previousSource))return getVisibility()==VISIBLE;
+    previousSource=source;
     List<Part> next=parts(source);boolean has=false;for(Part p:next)has|=p.svg||p.code;
     setVisibility(has?VISIBLE:GONE);if(!has){removeAllViews();rendered.clear();return false;}
     for(int n=0;n<next.size();n++){
@@ -68,10 +70,7 @@ final class SvgMessageContent extends LinearLayout {
     final String source;final InlineSvgView preview;
     Card(String source){super(host);this.source=source;
       int width=Math.max(host.dp(96),(int)(host.getResources().getDisplayMetrics().widthPixels*.82f)-host.dp(32));
-      double ratio=1.5;
-      try{org.jsoup.nodes.Element root=org.jsoup.Jsoup.parse(source,"",org.jsoup.parser.Parser.xmlParser()).children().first();String[] box=root.attr("viewBox").trim().split("[ ,]+");if(box.length==4)ratio=Double.parseDouble(box[2])/Double.parseDouble(box[3]);else if(root.hasAttr("width")&&root.hasAttr("height"))ratio=Double.parseDouble(root.attr("width").replace("px",""))/Double.parseDouble(root.attr("height").replace("px",""));}catch(Exception ignored){}
-      if(!Double.isFinite(ratio)||ratio<=0)ratio=1.5;
-      int height=(int)Math.max(host.dp(96),Math.min(host.dp(360),width/ratio));
+      int height=(int)Math.max(1,width/InlineSvgView.aspectRatio(source));
       preview=new InlineSvgView(host);preview.setBackground(null);addView(preview,new FrameLayout.LayoutParams(width,height));preview.content(source);preview.html=preview.html.replace("background:#fdfbff","background:transparent");
       preview.touch.setContentDescription("SVG 图像，点击放大，长按保存或分享");
       preview.touch.setOnClickListener(v->{if(host.messageActions.active())select();else withFile(path->SvgPreview.open(host,source,path));});

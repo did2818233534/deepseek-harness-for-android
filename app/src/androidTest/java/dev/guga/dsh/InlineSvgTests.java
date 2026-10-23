@@ -5,6 +5,8 @@ import android.view.*;
 public class InlineSvgTests {
   final String svg="<svg viewBox='0 0 100 100'><circle cx='50' cy='50' r='30' fill='purple'/></svg>";
   @Test public void onlyClosedFencesBecomePreviews(){
+    assertEquals(2.0,InlineSvgView.aspectRatio("<svg viewBox='0 0 800 400'></svg>"),.001);
+    assertEquals(.5,InlineSvgView.aspectRatio("<svg width='200px' height='400px'></svg>"),.001);
     assertFalse(SvgMessageContent.parts("```svg\n"+svg).get(0).svg);
     var parts=SvgMessageContent.parts("说明\n```svg\n"+svg+"\n```\n后文\n~~~xml\n"+svg+"\n~~~");
     assertEquals(4,parts.size());assertTrue(parts.get(1).svg);assertTrue(parts.get(3).svg);
@@ -30,7 +32,7 @@ public class InlineSvgTests {
       }catch(Exception e){throw new RuntimeException(e);}});
       i.waitForIdleSync();Thread.sleep(800);
       StreamingTests.screenshot(c,"inline-svg-natural.png");
-      i.runOnMainSync(()->{assertEquals(1,card[0].getChildCount());assertNotNull(turn[0].svgContent.getBackground());});
+      i.runOnMainSync(()->{assertEquals(1,card[0].getChildCount());assertEquals(card[0].preview.getLayoutParams().width,card[0].preview.getLayoutParams().height);assertTrue(card[0].preview.html.contains("background:transparent"));assertNotNull(turn[0].assistantBody.getBackground());});
       for(int n=0;n<2;n++){
         tap(i,card[0].preview.touch);Thread.sleep(600);i.waitForIdleSync();
         i.runOnMainSync(()->{assertNotSame(a.chatRoot,a.currentPage);a.onBackPressed();assertSame(a.chatRoot,a.currentPage);});

@@ -39,13 +39,13 @@ final class ArtifactViews {
           });
         }catch(Exception e){host.runOnUiThread(()->picture.setContentDescription("图片不可用："+path));}});
       }else{
-        TextView link=host.label(file.optString("name",new File(path).getName()),16,UiStyle.ACCENT);link.setPaintFlags(link.getPaintFlags()|android.graphics.Paint.UNDERLINE_TEXT_FLAG);link.setMinHeight(host.dp(48));link.setGravity(Gravity.CENTER_VERTICAL);link.setMaxLines(2);link.setEllipsize(android.text.TextUtils.TruncateAt.END);link.setPadding(host.dp(8),host.dp(8),host.dp(8),host.dp(8));
-        var icon=host.getDrawable(R.drawable.ic_folder).mutate();icon.setTint(UiStyle.ACCENT);icon.setBounds(0,0,host.dp(20),host.dp(20));link.setCompoundDrawablesRelative(icon,null,null,null);link.setCompoundDrawablePadding(host.dp(8));link.setBackground(host.ui.surface(android.graphics.Color.TRANSPARENT,12));link.setContentDescription("打开文件："+path);card=link;
+        TextView link=host.label(file.optString("name",new File(path).getName()),15,UiStyle.ACCENT);link.setMinHeight(host.dp(48));link.setGravity(Gravity.CENTER_VERTICAL);link.setMaxLines(2);link.setEllipsize(android.text.TextUtils.TruncateAt.END);link.setPadding(0,host.dp(4),host.dp(4),host.dp(4));
+        var icon=host.getDrawable(R.drawable.ic_file).mutate();icon.setTint(UiStyle.ACCENT);icon.setBounds(0,0,host.dp(18),host.dp(18));link.setCompoundDrawablesRelative(icon,null,null,null);link.setCompoundDrawablePadding(host.dp(8));link.setBackground(host.ui.surface(android.graphics.Color.TRANSPARENT,12));link.setContentDescription("打开文件："+path);card=link;
       }
       View target=card instanceof InlineSvgView?((InlineSvgView)card).touch:card;
       target.setOnClickListener(v->{if(host.messageActions.active())host.messageActions.toggle(owner.turnId+"/a");else if(image)WorkspaceFiles.preview(host,path);else WorkspaceFiles.open(host,path);});
       target.setOnLongClickListener(v->{WorkspaceFiles.actions(host,path,image&&!svg);return true;});
-      LinearLayout.LayoutParams p=card.getLayoutParams() instanceof LinearLayout.LayoutParams?(LinearLayout.LayoutParams)card.getLayoutParams():new LinearLayout.LayoutParams(-2,-2);p.bottomMargin=host.dp(8);row.addView(card,p);
+      LinearLayout.LayoutParams p=card.getLayoutParams() instanceof LinearLayout.LayoutParams?(LinearLayout.LayoutParams)card.getLayoutParams():new LinearLayout.LayoutParams(-2,-2);p.bottomMargin=host.dp(image?8:2);row.addView(card,p);
     }
     row.setVisibility(row.getChildCount()==0?View.GONE:View.VISIBLE);
   }

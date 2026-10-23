@@ -5,14 +5,14 @@ export class ConversationTitles {
   private pending = new Map<string, AbortController>();
   constructor(private ctx, private changed: () => void) {}
   title(id: string): string | undefined {
-    return this.ctx.sessionPersistence.load(id).title;
+    return this.ctx.sessionPersistence.summary(id).title;
   }
   cancel(id: string) { this.pending.get(id)?.abort(); }
   async generate(agent, model: string) {
     const id=agent.id;
     if(this.pending.has(id))return;
     const store=this.ctx.sessionPersistence;
-    const saved=store.load(id);
+    const saved=store.summary(id);
     if(saved.title || saved.titleAttempted)return;
     const events=agent.session.snapshotEvents();
     const first=events.find(e=>e.type==='user/message'&&e.data.source?.kind==='user');

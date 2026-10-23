@@ -35,7 +35,7 @@ public class ArtifactTests {
   MainActivity a=(MainActivity)i.startActivitySync(new Intent(c,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
   JSONObject state=new JSONObject().put("id","artifacts").put("revision",9191).put("turns",new JSONArray().put(new JSONObject().put("id","1").put("userText","查看处理后的图片").put("text","已生成图片").put("artifacts",new JSONArray().put(new JSONObject().put("path",file.getName()).put("name",file.getName())))));
   try {
-   i.runOnMainSync(()->{a.visible=false;a.render(state);assertEquals(1,a.turnViews.get("1").outputFiles.getChildCount());a.turnViews.get("1").outputFiles.getChildAt(0).performClick();});
+   i.runOnMainSync(()->{a.visible=false;a.render(state);assertEquals(1,a.turnViews.get("1").outputFiles.getChildCount());assertSame(a.turnViews.get("1").assistantBody,a.turnViews.get("1").outputFiles.getParent());assertSame(a.turnViews.get("1").assistantBody,a.turnViews.get("1").answer.getParent());a.turnViews.get("1").outputFiles.getChildAt(0).performClick();});
    long deadline=System.currentTimeMillis()+5000;while(a.currentPage==a.chatRoot&&System.currentTimeMillis()<deadline)Thread.sleep(30);
    i.waitForIdleSync();Thread.sleep(150);ZoomImageView[] image=new ZoomImageView[1];
    i.runOnMainSync(()->image[0]=(ZoomImageView)((LinearLayout)a.currentPage).getChildAt(1));

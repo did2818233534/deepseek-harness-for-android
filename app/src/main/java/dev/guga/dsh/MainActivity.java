@@ -29,7 +29,10 @@ public final class MainActivity extends Activity {
     bg = Color.rgb(253, 251, 255);
   final UiStyle ui = new UiStyle(this);
   final Map<Dialog, Runnable> dialogCleanup = new HashMap<>();
+  volatile String stateStamp="";
+  io.noties.markwon.Markwon markdownRenderer;
   final ExecutorService io = Executors.newSingleThreadExecutor();
+  final ExecutorService coreIo = Executors.newSingleThreadExecutor();
   final Handler handler = new Handler(Looper.getMainLooper());
   LinearLayout chatRoot, composer;
   MessageActions messageActions;
@@ -78,10 +81,10 @@ public final class MainActivity extends Activity {
       if (!visible) return;
       if (!polling) {
         polling = true;
-        io.execute(() -> {
+        coreIo.execute(() -> {
           try {
-            JSONObject state = Api.call("/state", new JSONObject());
-            runOnUiThread(() -> { if (visible) render(state); });
+            JSONObject state = Api.call("/state", new JSONObject().put("compact",true).put("stamp",stateStamp));
+            runOnUiThread(() -> { if (visible&&!state.optBoolean("unchanged")) render(state); });
           } catch (Exception e) {
             // Startup/reconnection is internal; keep the model label stable.
           } finally {
@@ -177,6 +180,7 @@ public final class MainActivity extends Activity {
     input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
     input.setPadding(dp(4), dp(12), dp(4), dp(14));
     input.setBackgroundColor(Color.TRANSPARENT);
+    input.addTextChangedListener(new android.text.TextWatcher(){public void beforeTextChanged(CharSequence s,int start,int count,int after){}public void onTextChanged(CharSequence s,int start,int before,int count){if(send!=null)updateSendIcon();}public void afterTextChanged(android.text.Editable e){}});
     attachments=new Attachments(this);
     composer.addView(attachments.tray,new LinearLayout.LayoutParams(-1,-2));
     composer.addView(input, new LinearLayout.LayoutParams(-1, -2));
@@ -237,7 +241,7 @@ public final class MainActivity extends Activity {
 
   @Override
   public void onDestroy() {
-    io.shutdown();
+    io.shutdown();coreIo.shutdown();
     for (Runnable cleanup : pageCleanup.values()) cleanup.run();
     pageCleanup.clear();
     for (Runnable cleanup : new ArrayList<>(dialogCleanup.values())) cleanup.run();
@@ -359,7 +363,7 @@ public final class MainActivity extends Activity {
     drawer.show();
     trackDialog(drawer);
     drawer.getWindow().setLayout(Math.min(dp(340), getResources().getDisplayMetrics().widthPixels - dp(48)), -1);
-    io.execute(() -> {
+    coreIo.execute(() -> {
       try {
         JSONArray sessions = Api.call("/sessions", new JSONObject().put("archived", archived)).getJSONArray("sessions");
         runOnUiThread(() -> {
@@ -454,28 +458,31 @@ public final class MainActivity extends Activity {
   }
 
   void request(String route, JSONObject body, Success done) {
-    io.execute(() -> {
+    coreIo.execute(() -> {
       try {
         Api.call(route, body);
+        JSONObject selectedState=route.equals("/select")?Api.call("/state",new JSONObject().put("compact",true)):null;
         runOnUiThread(() -> {
           try {
             if(route.equals("/select")){attachments.reset();input.setText("");}
-            if(route.equals("/send")){sending=false;send.setEnabled(attachments.importing==0);}
+            if(route.equals("/send")||route.equals("/steer")){sending=false;send.setEnabled(attachments.importing==0);}
             done.run();
+            if(selectedState!=null&&visible)render(selectedState);
           } catch (Exception e) {
             toast(e.getMessage());
           }
         });
       } catch (Exception e) {
-        if(route.equals("/send"))runOnUiThread(()->{sending=false;send.setEnabled(attachments.importing==0);});
+        if(route.equals("/send")||route.equals("/steer"))runOnUiThread(()->{sending=false;send.setEnabled(attachments.importing==0);});
         toast(e.getMessage());
       }
     });
   }
 
+  void updateSendIcon(){boolean steer=busy&&!input.getText().toString().trim().isEmpty();send.setImageResource(busy&&!steer?R.drawable.ic_stop:R.drawable.ic_send);send.setContentDescription(steer?"引导":busy?"停止任务":"发送消息");send.setTooltipText(send.getContentDescription());}
   void send() {
     if(sending||attachments.importing>0)return;
-    if (busy) {
+    if (busy && input.getText().toString().trim().isEmpty() && attachments.snapshot().length()==0) {
       request("/cancel", new JSONObject(), () -> {});
       return;
     }
@@ -485,7 +492,7 @@ public final class MainActivity extends Activity {
     try {
       startService(new Intent(this, HarnessService.class));
       sending=true;send.setEnabled(false);
-      request("/send", new JSONObject().put("text", text).put("attachments",attached), () -> {
+      request(busy?"/steer":"/send", new JSONObject().put("text", text).put("attachments",attached), () -> {
         if(input.getText().toString().trim().equals(text))input.setText("");
         attachments.clearSent(attached);
         input.requestFocus();
@@ -532,13 +539,13 @@ public final class MainActivity extends Activity {
   }
 
   void render(JSONObject state) {
+    stateStamp=state.optString("stamp");
     if (revision == -1) android.util.Log.i("DSH-Lifecycle", "Core state reachable");
     boolean changed = !currentId.equals(state.optString("id"));
     long next = state.optLong("revision");
     busy = state.optBoolean("busy");
-    send.setImageResource(busy ? R.drawable.ic_stop : R.drawable.ic_send);
-    send.setContentDescription(busy ? "停止任务" : "发送消息");
-    status.setText((busy ? "正在处理 · " : "") + state.optString("model"));
+    updateSendIcon();
+    status.setText((busy ? "正在处理 · " : "") + state.optString("model")+(state.optJSONArray("pendingGuidance")!=null&&state.optJSONArray("pendingGuidance").length()>0?" · 引导已排队":""));
     if (!changed && next == revision && !busy) return;
     boolean atBottom =
       scroll.getChildAt(0).getHeight() -
@@ -961,7 +968,7 @@ public final class MainActivity extends Activity {
     body.setOrientation(LinearLayout.VERTICAL);
     body.setPadding(dp(8), dp(16), dp(8), dp(20));
     View page = showPage("已归档对话", body);
-    io.execute(() -> {
+    coreIo.execute(() -> {
       try {
         JSONArray sessions = Api.call("/sessions", new JSONObject().put("archived", true)).getJSONArray("sessions");
         runOnUiThread(() -> {
@@ -997,7 +1004,7 @@ public final class MainActivity extends Activity {
   }
 
   void history() {
-    io.execute(() -> {
+    coreIo.execute(() -> {
       try {
         JSONArray rows = Api.call("/sessions", new JSONObject()).getJSONArray("sessions");
         String[] labels = new String[rows.length()];

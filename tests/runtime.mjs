@@ -15,6 +15,7 @@ let webEnabled = true, webRequests = [], invalidWeb = false;
 let titleRequests=[], titleMode="ok";
 let largeTool = false;
 let overflowBudget = 0, summaryCalls = 0, summaryMode = "ok";
+const held=new Map();let statusBusy=false;
 let child,
   requests = [],
   toolCalls = [],
@@ -41,6 +42,7 @@ const bridge = http.createServer(async (req, res) => {
     return;
   }
   if (req.url === "/status" || req.url === "/cancel-network") {
+    if(req.url==="/status")statusBusy=b.busy;
     res.end("{}");
     return;
   }
@@ -64,6 +66,11 @@ const bridge = http.createServer(async (req, res) => {
     }
     requests.push(b);
     res.setHeader("content-type", "text/event-stream");
+    if(mode==='parallel'){
+      const name=b.messages.filter(m=>m.role==='user').at(-1).content;
+      res.write('data: '+JSON.stringify({choices:[{delta:{content:'stream '+name}}]})+'\n\n');
+      held.set(name,()=>res.end('data: '+JSON.stringify({choices:[{delta:{},finish_reason:'stop'}]})+'\n\ndata: [DONE]\n\n'));return;
+    }
     if (mode.startsWith('compact')) {
       const summary = typeof b.messages.at(-1)?.content === 'string' && b.messages.at(-1).content.startsWith('You are now acting as a compaction engine');
       const emit = (text, usage) => res.end('data: '+JSON.stringify({choices:[{delta:{content:text},finish_reason:'stop'}], ...(usage ? {usage:{prompt_tokens:usage,completion_tokens:10}} : {})})+'\n\ndata: [DONE]\n\n');
@@ -541,6 +548,28 @@ try {
   await api('/session/delete',{id:deleteTitle.id});await new Promise(r=>setTimeout(r,500));
   assert(!fs.existsSync(path.join(root,'sessions',deleteTitle.id+'.json')));
 
+  titleMode='ok';mode='parallel';
+  await api('/select');const aId=(await api('/state')).id;await api('/send',{text:'parallel A'});await until(()=>held.has('parallel A'));
+  await api('/select');const bId=(await api('/state')).id;assert.notEqual(aId,bId);assert.equal((await api('/state')).busy,false);
+  await api('/send',{text:'parallel B'});await until(()=>held.has('parallel B'));assert.equal((await api('/state')).runningCount,2);
+  assert((await api('/state')).turns.at(-1).text.includes('parallel B'));
+  await api('/select',{id:aId});assert((await api('/state')).turns.at(-1).text.includes('parallel A'));assert(!(await api('/state')).turns.at(-1).text.includes('parallel B'));
+  await api('/steer',{text:'steer A'});assert.equal((await api('/state')).pendingGuidance.length,1);assert((await api('/state')).busy);mode='text';held.get('parallel A')();await settled();
+  assert(requests.some(r=>r.messages.some(m=>m.role==='user'&&m.content==='steer A')),'steering consumed at next step');
+  await until(()=>statusBusy===true);assert.equal((await api('/state')).runningCount,1);
+  await api('/select',{id:bId});assert((await api('/state')).busy);await api('/cancel');await settled();held.get('parallel B')();
+  assert.equal((await api('/state')).runningCount,0);
+  await api('/select',{id:aId});assert((await api('/state')).turns.some(t=>t.userText==='steer A'));
+
+  mode='parallel';await api('/select');const cId=(await api('/state')).id;await api('/send',{text:'parallel C'});await until(()=>held.has('parallel C'));
+  await api('/select');const dId=(await api('/state')).id;await api('/send',{text:'parallel D'});await until(()=>held.has('parallel D'));
+  await api('/select',{id:cId});await api('/cancel');await settled();await api('/select',{id:dId});assert((await api('/state')).busy);assert.equal((await api('/state')).runningCount,1);
+  held.get('parallel D')();await settled();held.get('parallel C')();assert.equal((await api('/state')).pendingGuidance.length,0);
+  await api('/select');
+  const compactState=await api('/state',{compact:true});
+  assert(!('events' in compactState));assert(Array.isArray(compactState.turns));
+  assert.equal((await api('/state',{compact:true,stamp:compactState.stamp})).unchanged,true);
+  await api('/select');assert.notEqual((await api('/state',{compact:true,stamp:compactState.stamp})).stamp,compactState.stamp);
   console.log(
     "PASS: upstream loop, tool round trip, transcript mapping, durable resume, cancellation, authorization, upstream multi-query search/fetch, malformed response, tool enablement, image transport and durable attachment replay; desktop compaction pressure, overflow recovery, restart, failure, cancellation, pruning and bounded recovery",
   );

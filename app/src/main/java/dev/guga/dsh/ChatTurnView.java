@@ -13,10 +13,11 @@ final class ChatTurnView extends LinearLayout {
   final TextView caption;
   final SvgMessageContent svgContent;
   final ImageView chevron;
+  final ProgressBar progress;
   boolean expanded, initialized, wasActive;
   String selectionKey="";
   String turnId="", attachmentKey="";
-  final LinearLayout attachmentRow, outputFiles;
+  final LinearLayout attachmentRow, outputFiles, assistantBody;
   String outputKey="";
   final ChatMarkdown markdown;
 
@@ -31,6 +32,7 @@ final class ChatTurnView extends LinearLayout {
     header=new LinearLayout(host); header.setGravity(Gravity.CENTER_VERTICAL);
     header.setMinimumHeight(host.dp(48)); header.setPadding(host.dp(8),0,host.dp(8),0);
     header.setBackground(host.ui.surface(android.graphics.Color.TRANSPARENT,16));
+    progress=new ProgressBar(host);progress.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(UiStyle.ACCENT));header.addView(progress,new LayoutParams(host.dp(18),host.dp(18)));progress.setVisibility(GONE);
     caption=host.label("",13,host.muted);
     header.addView(caption,new LayoutParams(0,-2,1));
     chevron=new ImageView(host); chevron.setImageResource(R.drawable.ic_chevron_down);
@@ -44,9 +46,10 @@ final class ChatTurnView extends LinearLayout {
     details.addView(reasoning,new LayoutParams(-1,-2));
     steps=host.label("",13,host.muted); steps.setTextIsSelectable(true); steps.setLineSpacing(host.dp(5),1);
     details.addView(steps,new LayoutParams(-1,-2)); process.addView(details,new LayoutParams(-1,-2));
-    answer=bubble(false); addView(answer,bubbleParams(false));
-    svgContent=new SvgMessageContent(this); addView(svgContent,bubbleParams(false));
-    outputFiles=new LinearLayout(host);outputFiles.setOrientation(VERTICAL);outputFiles.setVisibility(GONE);addView(outputFiles,bubbleParams(false));
+    assistantBody=new LinearLayout(host);assistantBody.setOrientation(VERTICAL);assistantBody.setBackground(host.ui.bubble(UiStyle.LOW,false));assistantBody.setClipToOutline(true);addView(assistantBody,bubbleParams(false));
+    answer=bubble(false);answer.setBackground(null);assistantBody.addView(answer,new LayoutParams(-2,-2));
+    svgContent=new SvgMessageContent(this);svgContent.setBackground(null);assistantBody.addView(svgContent,new LayoutParams(-2,-2));
+    outputFiles=new LinearLayout(host);outputFiles.setOrientation(VERTICAL);outputFiles.setVisibility(GONE);outputFiles.setPadding(host.dp(14),host.dp(2),host.dp(14),host.dp(8));assistantBody.addView(outputFiles,new LayoutParams(-2,-2));
     ChatMarkdown.links(answer,host);
     user.setOnLongClickListener(v -> {host.messageActions.toggle(turnId+"/u");return true;});
     answer.setOnLongClickListener(v -> {host.messageActions.toggle(turnId+"/a");return true;});
@@ -82,14 +85,13 @@ final class ChatTurnView extends LinearLayout {
     text(user,turn.optString("userText"));
     String reply=turn.optString("text");
     boolean inline=svgContent.update(reply);
-    markdown.update(answer,reply);
-    if(inline)answer.setVisibility(GONE);
+    if(inline){markdown.source=reply;answer.setVisibility(GONE);}else markdown.update(answer,reply);
     JSONArray generated=ArtifactViews.collect(turn);String generatedKey=generated.toString();
     if(!generatedKey.equals(outputKey)){outputKey=generatedKey;ArtifactViews.fill(this,generated);}
     String thought=turn.optString("reasoning"); JSONArray tools=turn.optJSONArray("tools");
     boolean hasTools=tools!=null&&tools.length()>0, hasProcess=!thought.isEmpty()||hasTools;
     boolean active=turn.optBoolean("processActive")&&turn.optBoolean("busy");
-    process.setVisibility(hasProcess?VISIBLE:GONE);
+    process.setVisibility(hasProcess?VISIBLE:GONE);progress.setVisibility(active?VISIBLE:GONE);
     if(!initialized || active!=wasActive) expanded=active;
     initialized=true; wasActive=active;
     text(reasoning,thought);
@@ -123,11 +125,11 @@ final class ChatTurnView extends LinearLayout {
     boolean attachmentSelected=host.messageActions.selected.contains(turnId+"/u");
     attachmentRow.setBackground(attachmentSelected?host.ui.surface(0xFFDDD0F4,16):null);
     attachmentRow.setContentDescription((attachmentSelected?"已选择，":"")+"用户附件，长按选择");
-    svgContent.setBackground(host.ui.bubble(host.messageActions.selected.contains(turnId+"/a")?0xFFDDD0F4:UiStyle.LOW,false));
+    assistantBody.setBackground(host.ui.bubble(host.messageActions.selected.contains(turnId+"/a")?0xFFDDD0F4:UiStyle.LOW,false));
     for(boolean mine:new boolean[]{true,false}){
       TextView view=mine?user:answer;boolean selected=host.messageActions.selected.contains(turnId+(mine?"/u":"/a"));
       android.graphics.drawable.GradientDrawable background=host.ui.bubble(selected?0xFFDDD0F4:mine?0xFFE8DEF8:UiStyle.LOW,mine);
-      if(selected)background.setStroke(host.dp(2),UiStyle.ACCENT);view.setBackground(background);
+      if(selected)background.setStroke(host.dp(2),UiStyle.ACCENT);if(mine)view.setBackground(background);
       view.setContentDescription((selected?"已选择，":"")+(mine?"用户消息":"助手消息")+"，长按选择");
     }
   }
@@ -149,7 +151,7 @@ final class ChatTurnView extends LinearLayout {
   }
   static String toolLabel(String name) {
     switch(name) {
-      case "compact_context": return "整理上下文";
+      case "compact_context": return "压缩上下文";
       case "web_search": return "搜索网页";
       case "web_fetch": return "读取网页";
       case "list_files": return "查看文件列表";

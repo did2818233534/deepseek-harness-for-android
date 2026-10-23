@@ -10,7 +10,20 @@ final class InlineSvgView extends FrameLayout {
   final View touch;
   final ViewTreeObserver.OnScrollChangedListener scrollListener=this::sync;
   InlineSvgView(MainActivity host){super(host);this.host=host;setBackground(host.ui.shape(UiStyle.LOW,18));setClipToOutline(true);touch=new View(host);addView(touch,new LayoutParams(-1,-1));}
-  void content(String source){html=SvgPreview.html(source).replace("max-height:90vh","max-height:100vh");sync();}
+  static double aspectRatio(String source){
+    try{var root=org.jsoup.Jsoup.parse(SvgPreview.extract(source),"",org.jsoup.parser.Parser.xmlParser()).children().first();
+      String[] box=root.attr("viewBox").trim().split("[ ,\\s]+");
+      double ratio=box.length==4?Double.parseDouble(box[2])/Double.parseDouble(box[3]):Double.parseDouble(root.attr("width").replace("px",""))/Double.parseDouble(root.attr("height").replace("px",""));
+      if(Double.isFinite(ratio)&&ratio>0)return ratio;
+    }catch(Exception ignored){}return 1.5;
+  }
+  void content(String source){
+    double ratio=aspectRatio(source);ViewGroup.LayoutParams p=getLayoutParams();
+    if(p!=null&&p.width>0){int width=p.width;double height=width/ratio;int limit=host.dp(2000);if(height>limit){height=limit;width=Math.max(1,(int)Math.round(height*ratio));}p.width=width;p.height=Math.max(1,(int)Math.round(height));setLayoutParams(p);}
+    html=SvgPreview.html(source).replace("background:#fdfbff","background:transparent").replace("min-height:100%","height:100%").replace("min-height:100vh","height:100vh").replace("max-height:90vh;width:100%;height:auto","max-height:100vh;width:100%;height:100%;display:block");
+    if(web!=null)web.loadDataWithBaseURL("https://svg.invalid/",html,"text/html","UTF-8",null);
+    sync();
+  }
   void sync(){
     android.graphics.Rect rect=new android.graphics.Rect();boolean visible=isAttachedToWindow()&&getWindowVisibility()==VISIBLE&&getGlobalVisibleRect(rect);
     if(!visible){release();return;}

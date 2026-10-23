@@ -11,6 +11,13 @@ import {
 export class AndroidSessions extends SessionPersistence {
   static root = "";
   owners = new Set<string>();
+  summaries = new Map<string, any>();
+  remember(id, data) {
+    const first=data.events.find(e=>e.type==="user/message");
+    const summary={header:data.header,eventCount:data.events.length,revision:String(data.events.length),title:data.title,titleAttempted:data.titleAttempted,archived:data.archived===true,hasMessages:!!first,fallbackTitle:first?.data.source?.userText?.slice(0,45)||first?.data.source?.attachments?.[0]?.name||first?.data.content?.find(b=>b.type==="text")?.text?.slice(0,45)||"新对话"};
+    this.summaries.set(id,summary);return summary;
+  }
+  summary(id) {return this.summaries.get(id)||this.remember(id,this.load(id));}
   failure: Error | null = null;
   constructor(ctx) {
     super(ctx);
@@ -42,7 +49,7 @@ export class AndroidSessions extends SessionPersistence {
   }
   load(id) {
     try {
-      return JSON.parse(fs.readFileSync(this.file(id), "utf8"));
+      const data=JSON.parse(fs.readFileSync(this.file(id), "utf8"));this.remember(id,data);return data;
     } catch (e) {
       if (e.code === "ENOENT") throw new SessionPersistenceNotFoundError(id);
       throw e;
@@ -58,6 +65,7 @@ export class AndroidSessions extends SessionPersistence {
       fs.closeSync(fd);
     }
     fs.renameSync(p + ".tmp", p);
+    this.remember(id,data);
     const dir = fs.openSync(AndroidSessions.root, "r");
     try {
       fs.fsyncSync(dir);
@@ -133,7 +141,7 @@ export class AndroidSessions extends SessionPersistence {
   remove(id) {
     this.load(id); // Validate existence before mutating ownership.
     fs.unlinkSync(this.file(id));
-    this.owners.delete(id);
+    this.owners.delete(id);this.summaries.delete(id);
     const dir = fs.openSync(AndroidSessions.root, "r");
     try { fs.fsyncSync(dir); } finally { fs.closeSync(dir); }
   }
@@ -142,12 +150,7 @@ export class AndroidSessions extends SessionPersistence {
   }
   async stat(id) {
     try {
-      const d = this.load(id);
-      return {
-        header: d.header,
-        eventCount: d.events.length,
-        revision: String(d.events.length),
-      };
+      const d=this.summary(id);return {header:d.header,eventCount:d.eventCount,revision:d.revision};
     } catch (e) {
       if (e instanceof SessionPersistenceNotFoundError) return undefined;
       throw e;

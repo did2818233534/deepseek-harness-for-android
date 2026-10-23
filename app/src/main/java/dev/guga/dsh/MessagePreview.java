@@ -63,9 +63,9 @@ final class MessagePreview {
         : "(function(){window.getSelection().removeAllRanges();return false;})()";
       web.evaluateJavascript(script,result->{boolean selected="true".equals(result);select.setSelected(selected);select.setEnabled(true);select.setContentDescription(selected?"全不选":"全选");select.setTooltipText(select.getContentDescription());select.setImageResource(selected?R.drawable.ic_deselect_all:R.drawable.ic_select_all);select.setColorFilter(selected?Color.WHITE:UiStyle.ACCENT);select.setBackground(host.ui.surface(selected?UiStyle.ACCENT:UiStyle.SURFACE,24));});
     });
-    copy.setOnClickListener(v->web.evaluateJavascript("window.getSelection().toString()",result->{
+    copy.setOnClickListener(v->web.evaluateJavascript("(function(){var selected=window.getSelection().toString();if(selected)return selected;var root=document.querySelector('main');var buttons=root.querySelectorAll('a.code-copy');buttons.forEach(function(b){b.style.display='none';});var text=root.innerText;buttons.forEach(function(b){b.style.display='';});return text;})()",result->{
       String selected="";try{Object value=new org.json.JSONTokener(result).nextValue();if(value instanceof String)selected=(String)value;}catch(Exception ignored){}
-      ((android.content.ClipboardManager)host.getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("消息",selected.isEmpty()?source:selected));Toast.makeText(host,selected.isEmpty()?"已复制完整 Markdown":"已复制选中文字",Toast.LENGTH_SHORT).show();
+      ((android.content.ClipboardManager)host.getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("消息",selected));Toast.makeText(host,"已复制文字",Toast.LENGTH_SHORT).show();
     }));
     header.addView(actions);page.addView(web,new LinearLayout.LayoutParams(-1,0,1));
     host.pageCleanup.put(page,()->{web.stopLoading();web.destroy();});

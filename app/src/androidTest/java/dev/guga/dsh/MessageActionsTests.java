@@ -24,6 +24,7 @@ public class MessageActionsTests {
       String markdown=a.messageActions.markdown();assertTrue(markdown.indexOf("## 用户")<markdown.indexOf("## 助手"));
       assertTrue(markdown.contains("**中文答案**"));assertFalse(markdown.contains("不应导出"));
       view.user.performClick();assertEquals(1,a.messageActions.selected.size());
+      a.messageActions.copy.performClick();assertEquals("**中文答案**\n\n- 项目一",((ClipboardManager)c.getSystemService(Context.CLIPBOARD_SERVICE)).getPrimaryClip().getItemAt(0).getText().toString());
       a.messageActions.all.performClick();assertEquals(2,a.messageActions.selected.size());assertEquals("取消全选",a.messageActions.all.getText().toString());
       a.messageActions.all.performClick();assertEquals(0,a.messageActions.selected.size());assertTrue(a.messageActions.active());assertFalse(a.messageActions.share.isEnabled());
       a.messageActions.all.performClick();assertEquals(2,a.messageActions.selected.size());
@@ -33,6 +34,16 @@ public class MessageActionsTests {
     i.runOnMainSync(() -> {
       a.onBackPressed();assertFalse(a.messageActions.active());assertEquals(View.VISIBLE,a.composer.getVisibility());assertFalse(a.isFinishing());a.finish();
     });
+  }
+  @Test public void compactionIndicatorAndSteeringInput()throws Exception{
+    var i=InstrumentationRegistry.getInstrumentation();Context c=i.getTargetContext();
+    dev.guga.updates.UpdateTestDriver.prefs(c).edit().putString("checkedDay",dev.guga.updates.UpdateTestDriver.today()).commit();
+    MainActivity a=(MainActivity)i.startActivitySync(new Intent(c,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+    JSONObject t=new JSONObject().put("id","1").put("userText","继续").put("busy",true).put("processActive",true).put("tools",new JSONArray().put(new JSONObject().put("name","compact_context").put("status","running")));
+    JSONObject state=new JSONObject().put("id","compress-ui").put("revision",9876).put("busy",true).put("turns",new JSONArray().put(t));
+    try{i.runOnMainSync(()->{a.visible=false;a.render(state);ChatTurnView v=a.turnViews.get("1");assertEquals(View.VISIBLE,v.progress.getVisibility());assertTrue(v.caption.getText().toString().contains("正在压缩上下文"));a.input.setText("补充要求");assertEquals("引导",a.send.getContentDescription());a.input.setText("");assertEquals("停止任务",a.send.getContentDescription());});
+      t.put("busy",false).put("processActive",false);i.runOnMainSync(()->{a.turnViews.get("1").update(t);assertEquals(View.GONE,a.turnViews.get("1").progress.getVisibility());});
+    }finally{i.runOnMainSync(a::finish);}
   }
   @Test public void markdownFileCanBeSharedReadOnlyAndSavedToChosenUri() throws Exception {
     var i=InstrumentationRegistry.getInstrumentation();Context c=i.getTargetContext();

@@ -43,9 +43,10 @@ public class PreviewTests {
     assertTrue(js(web[0],"window.getSelection().toString()").contains("推荐渠道"));
     i.runOnMainSync(()->assertEquals("全不选",toggle[0].getContentDescription().toString()));
    }
+   js(web[0],"window.getSelection().removeAllRanges()");
    StreamingTests.screenshot(c,"message-preview.png");
    i.runOnMainSync(()->{((LinearLayout)((LinearLayout)((LinearLayout)a.currentPage).getChildAt(0)).getChildAt(2)).getChildAt(1).performClick();});Thread.sleep(200);
-   i.runOnMainSync(()->{assertTrue(((ClipboardManager)c.getSystemService(Context.CLIPBOARD_SERVICE)).getPrimaryClip().getItemAt(0).getText().toString().contains("中文内容"));a.onBackPressed();assertSame(a.chatRoot,a.currentPage);});
+   i.runOnMainSync(()->{assertTrue(((ClipboardManager)c.getSystemService(Context.CLIPBOARD_SERVICE)).getPrimaryClip().getItemAt(0).getText().toString().contains("中文内容"));assertFalse(((ClipboardManager)c.getSystemService(Context.CLIPBOARD_SERVICE)).getPrimaryClip().getItemAt(0).getText().toString().contains("**中文内容**"));a.onBackPressed();assertSame(a.chatRoot,a.currentPage);});
    // Deliver real touch events, not performLongClick (which bypasses longClickable).
    long time=android.os.SystemClock.uptimeMillis();
    i.runOnMainSync(()->{MotionEvent e=MotionEvent.obtain(time,time,MotionEvent.ACTION_DOWN,30,30,0);a.turnViews.get("1").answer.dispatchTouchEvent(e);e.recycle();});

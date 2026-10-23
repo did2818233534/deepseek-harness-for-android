@@ -40,7 +40,7 @@ public class CompactionTests {
       Api.call("/send",new JSONObject().put("text","原始文档要求。".repeat(2000)));StreamingTests.awaitState("任务已完成",false);
       Api.call("/send",new JSONObject().put("text","继续完成"));JSONObject done=StreamingTests.awaitState("继续完成",false);
       assertEquals("文档处理任务",done.optString("title"));assertEquals("",done.optString("lastError"));assertEquals(4,calls.get());assertEquals(1,summaries.get());assertEquals(2,done.getJSONArray("turns").length());
-      i.runOnMainSync(()->{a.render(done);assertEquals("文档处理任务",a.chatTitle.getText().toString());ChatTurnView v=a.turnViews.values().stream().reduce((first,second)->second).get();assertEquals(View.GONE,v.details.getVisibility());v.header.performClick();assertTrue(v.steps.getText().toString().contains("整理上下文"));});
+      i.runOnMainSync(()->{a.render(done);assertEquals("文档处理任务",a.chatTitle.getText().toString());ChatTurnView v=a.turnViews.values().stream().reduce((first,second)->second).get();assertEquals(View.GONE,v.details.getVisibility());v.header.performClick();assertTrue(v.steps.getText().toString().contains("压缩上下文"));});
       StreamingTests.screenshot(c,"compaction-completed.png");
       // Changing tool availability replaces the system prompt: token-meter used Array.with here.
       new Settings(c).saveWeb(true,true);
