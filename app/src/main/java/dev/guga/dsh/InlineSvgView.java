@@ -8,7 +8,9 @@ import android.widget.FrameLayout;
 final class InlineSvgView extends FrameLayout {
   final MainActivity host;String html;WebView web;
   final View touch;
-  final ViewTreeObserver.OnScrollChangedListener scrollListener=this::sync;
+  final Runnable syncLater=this::sync;
+  final ViewTreeObserver.OnScrollChangedListener scrollListener=this::scheduleSync;
+  void scheduleSync(){removeCallbacks(syncLater);postDelayed(syncLater,80);}
   InlineSvgView(MainActivity host){super(host);this.host=host;setBackground(host.ui.shape(UiStyle.LOW,18));setClipToOutline(true);touch=new View(host);addView(touch,new LayoutParams(-1,-1));}
   static double aspectRatio(String source){
     try{var root=org.jsoup.Jsoup.parse(SvgPreview.extract(source),"",org.jsoup.parser.Parser.xmlParser()).children().first();
@@ -26,11 +28,17 @@ final class InlineSvgView extends FrameLayout {
   }
   void sync(){
     android.graphics.Rect rect=new android.graphics.Rect();boolean visible=isAttachedToWindow()&&getWindowVisibility()==VISIBLE&&getGlobalVisibleRect(rect);
+    // Keep an existing renderer just outside the viewport while the user scrolls
+    // back and forth, but never allocate offscreen renderers speculatively.
+    if(!visible&&web!=null&&isAttachedToWindow()&&getWindowVisibility()==VISIBLE){
+      android.graphics.Rect viewport=new android.graphics.Rect();int[] at=new int[2];getLocationOnScreen(at);
+      if(host.scroll.getGlobalVisibleRect(viewport)){int margin=viewport.height();visible=at[1]+getHeight()>viewport.top-margin&&at[1]<viewport.bottom+margin;}
+    }
     if(!visible){release();return;}
     if(web==null&&html!=null){web=new WebView(host);web.setBackgroundColor(android.graphics.Color.TRANSPARENT);web.getSettings().setJavaScriptEnabled(false);web.getSettings().setAllowFileAccess(false);web.getSettings().setAllowContentAccess(false);web.getSettings().setBlockNetworkLoads(true);web.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);addView(web,0,new LayoutParams(-1,-1));web.loadDataWithBaseURL("https://svg.invalid/",html,"text/html","UTF-8",null);}
   }
   void release(){if(web!=null){removeView(web);web.stopLoading();web.destroy();web=null;}}
-  @Override protected void onAttachedToWindow(){super.onAttachedToWindow();getViewTreeObserver().addOnScrollChangedListener(scrollListener);post(this::sync);}
-  @Override protected void onDetachedFromWindow(){getViewTreeObserver().removeOnScrollChangedListener(scrollListener);release();super.onDetachedFromWindow();}
-  @Override protected void onWindowVisibilityChanged(int visibility){super.onWindowVisibilityChanged(visibility);post(this::sync);}
+  @Override protected void onAttachedToWindow(){super.onAttachedToWindow();getViewTreeObserver().addOnScrollChangedListener(scrollListener);scheduleSync();}
+  @Override protected void onDetachedFromWindow(){getViewTreeObserver().removeOnScrollChangedListener(scrollListener);removeCallbacks(syncLater);release();super.onDetachedFromWindow();}
+  @Override protected void onWindowVisibilityChanged(int visibility){super.onWindowVisibilityChanged(visibility);scheduleSync();}
 }

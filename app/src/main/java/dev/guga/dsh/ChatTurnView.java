@@ -18,7 +18,8 @@ final class ChatTurnView extends LinearLayout {
   String selectionKey="";
   String turnId="", attachmentKey="";
   final LinearLayout attachmentRow, outputFiles, assistantBody;
-  String outputKey="";
+  String outputKey="", payload;
+  int contentUpdates;
   final ChatMarkdown markdown;
 
   ChatTurnView(MainActivity host) {
@@ -73,6 +74,9 @@ final class ChatTurnView extends LinearLayout {
   }
   void update(JSONObject turn) {
     turnId=turn.optString("id");selection();
+    String nextPayload=turn.toString();
+    if(nextPayload.equals(payload))return;
+    payload=nextPayload;contentUpdates++;
     JSONArray attached=turn.optJSONArray("attachments");String key=attached==null?"":attached.toString();
     if(!key.equals(attachmentKey)){
       attachmentKey=key;attachmentRow.removeAllViews();
@@ -111,7 +115,6 @@ final class ChatTurnView extends LinearLayout {
     long elapsed=turn.optLong("processElapsedMs");
     if(elapsed>0) label+=" · "+duration(elapsed);
     if(!label.contentEquals(caption.getText()))caption.setText(label); showExpansion();
-    waiting.setText("正在请求模型…");
     waiting.setVisibility(turn.optBoolean("busy")&&!hasProcess&&turn.optString("text").isEmpty()?VISIBLE:GONE);
   }
   String attachmentSummary(){

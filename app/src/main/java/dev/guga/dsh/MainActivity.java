@@ -55,6 +55,7 @@ public final class MainActivity extends Activity {
   boolean visible, busy, polling;
   final Map<String, ChatTurnView> turnViews = new LinkedHashMap<>();
   TextView turnError;
+  final TranscriptViews transcriptViews=new TranscriptViews(this);
   long revision = -1;
   String currentId = "",
     exportPath = "";
@@ -239,8 +240,11 @@ public final class MainActivity extends Activity {
     super.onPause();
   }
 
+  @Override public void onTrimMemory(int level){super.onTrimMemory(level);if(level>=TRIM_MEMORY_RUNNING_LOW)transcriptViews.clear();}
+
   @Override
   public void onDestroy() {
+    transcriptViews.clear();
     io.shutdown();coreIo.shutdown();
     for (Runnable cleanup : pageCleanup.values()) cleanup.run();
     pageCleanup.clear();
@@ -424,6 +428,7 @@ public final class MainActivity extends Activity {
       .setPositiveButton("删除", (dialog, which) -> {
         try {
           request("/session/delete", new JSONObject().put("id", session.getString("id")), () -> {
+            transcriptViews.forget(session.optString("id"));
             revision = -1;
             Toast.makeText(this, "已删除", Toast.LENGTH_SHORT).show();
             updated.run();
@@ -621,7 +626,8 @@ public final class MainActivity extends Activity {
 
   void renderTurns(JSONObject state, boolean changed, boolean atBottom) {
     JSONArray turns=state.optJSONArray("turns");
-    if(changed || turnViews.size()>turns.length()) {messageActions.clear();messages.removeAllViews(); turnViews.clear(); turnError=null;}
+    if(changed) transcriptViews.activate(state.optString("id"));
+    if(turnViews.size()>turns.length()) {messageActions.clear();messages.removeAllViews();turnViews.clear();turnError=null;}
     chatTitle.setText((!state.optString("title").isEmpty()?state.optString("title"):turns.length()==0?"新对话":turns.optJSONObject(0).optString("userText","新对话"))+(state.optBoolean("isBranch")?" · 分支":""));
     Set<String> ids=new HashSet<>();
     for(int n=0;n<turns.length();n++) {
