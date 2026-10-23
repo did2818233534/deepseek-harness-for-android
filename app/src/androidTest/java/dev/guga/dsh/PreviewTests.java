@@ -20,13 +20,13 @@ public class PreviewTests {
    i.runOnMainSync(()->{a.visible=false;a.render(state);ChatTurnView v=a.turnViews.get("1");assertTrue(v.answer.isLongClickable());assertTrue(v.answer.isClickable());v.answer.performClick();assertNotSame(a.chatRoot,a.currentPage);assertFalse(a.messageActions.active());});
    Thread.sleep(700);
    WebView[] web=new WebView[1];
-   i.runOnMainSync(()->{LinearLayout page=(LinearLayout)a.currentPage;web[0]=(WebView)page.getChildAt(2);((LinearLayout)page.getChildAt(1)).getChildAt(0).performClick();});
+   i.runOnMainSync(()->{LinearLayout page=(LinearLayout)a.currentPage;web[0]=(WebView)page.getChildAt(1);((LinearLayout)((LinearLayout)page.getChildAt(0)).getChildAt(2)).getChildAt(0).performClick();});
    Thread.sleep(200);
    CountDownLatch done=new CountDownLatch(1);String[] selected=new String[1];
    i.runOnMainSync(()->web[0].evaluateJavascript("window.getSelection().toString()",value->{selected[0]=value;done.countDown();}));
    assertTrue(done.await(5,TimeUnit.SECONDS));assertTrue("Full preview selection: "+selected[0],selected[0].contains("推荐渠道"));
    StreamingTests.screenshot(c,"message-preview.png");
-   i.runOnMainSync(()->{((LinearLayout)((LinearLayout)a.currentPage).getChildAt(1)).getChildAt(1).performClick();});Thread.sleep(200);
+   i.runOnMainSync(()->{((LinearLayout)((LinearLayout)((LinearLayout)a.currentPage).getChildAt(0)).getChildAt(2)).getChildAt(1).performClick();});Thread.sleep(200);
    i.runOnMainSync(()->{assertTrue(((ClipboardManager)c.getSystemService(Context.CLIPBOARD_SERVICE)).getPrimaryClip().getItemAt(0).getText().toString().contains("中文内容"));a.onBackPressed();assertSame(a.chatRoot,a.currentPage);});
    // Deliver real touch events, not performLongClick (which bypasses longClickable).
    long time=android.os.SystemClock.uptimeMillis();

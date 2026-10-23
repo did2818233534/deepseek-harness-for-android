@@ -27,7 +27,7 @@ final class MessagePreview {
     // Reuse navigation/insets but give the document its own full-height scrolling surface.
     page.removeViewAt(1);
     LinearLayout header=(LinearLayout)page.getChildAt(0);
-    TextView title=host.label("消息预览",18,UiStyle.INK);title.setPadding(host.dp(12),0,0,0);header.addView(title,new LinearLayout.LayoutParams(0,-2,1));
+    TextView title=host.label("消息预览",18,UiStyle.INK);title.setPadding(host.dp(12),0,0,0);title.setSingleLine(true);title.setEllipsize(android.text.TextUtils.TruncateAt.END);header.addView(title,new LinearLayout.LayoutParams(0,-2,1));
     WebView web=new WebView(host);web.setBackgroundColor(UiStyle.BACKGROUND);
     // Only app-owned selection commands run; sanitized HTML and CSP forbid document scripts.
     web.getSettings().setJavaScriptEnabled(true);web.getSettings().setAllowFileAccess(false);web.getSettings().setAllowContentAccess(false);web.getSettings().setBlockNetworkLoads(true);
@@ -36,16 +36,20 @@ final class MessagePreview {
         Uri uri=request.getUrl();if("https".equals(uri.getScheme())||"http".equals(uri.getScheme()))try{host.startActivity(new Intent(Intent.ACTION_VIEW,uri));}catch(ActivityNotFoundException e){host.toast("没有可打开链接的应用");}return true;
       }
     });
-    LinearLayout actions=host.row();actions.setPadding(0,host.dp(8),0,host.dp(8));
+    LinearLayout actions=host.row();actions.setGravity(Gravity.END);actions.setPadding(0,host.dp(2),0,host.dp(2));
     Button select=new Button(host);select.setText("全选");host.ui.action(select,false);
     Button copy=new Button(host);copy.setText("复制");host.ui.action(copy,false);
-    for(Button button:new Button[]{select,copy}){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(0,host.dp(48),1);p.setMargins(host.dp(4),0,host.dp(4),0);actions.addView(button,p);}
-    select.setOnClickListener(v->{web.requestFocus();web.evaluateJavascript("(function(){var r=document.createRange();r.selectNodeContents(document.querySelector('main'));var s=window.getSelection();s.removeAllRanges();s.addRange(r);})()",null);});
+    for(Button button:new Button[]{select,copy}){
+      button.setTextSize(13);button.setMinWidth(0);button.setMinimumWidth(0);button.setPadding(host.dp(14),0,host.dp(14),0);button.setElevation(0);button.setStateListAnimator(null);
+      button.setBackground(new android.graphics.drawable.InsetDrawable(host.ui.surface(UiStyle.SURFACE,18),0,host.dp(7),0,host.dp(7)));
+      LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-2,host.dp(48));p.setMargins(host.dp(8),0,0,0);actions.addView(button,p);
+    }
+    select.setOnClickListener(v->{web.requestFocus();web.evaluateJavascript("(function(){var r=document.createRange();r.selectNodeContents(document.querySelector('main'));var s=window.getSelection();var all=s.toString()===r.toString()&&s.toString().length>0;s.removeAllRanges();if(!all)s.addRange(r);return !all;})()",result->select.setText("true".equals(result)?"全不选":"全选"));});
     copy.setOnClickListener(v->web.evaluateJavascript("window.getSelection().toString()",result->{
       String selected="";try{Object value=new org.json.JSONTokener(result).nextValue();if(value instanceof String)selected=(String)value;}catch(Exception ignored){}
       ((android.content.ClipboardManager)host.getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("消息",selected.isEmpty()?source:selected));Toast.makeText(host,selected.isEmpty()?"已复制完整 Markdown":"已复制选中文字",Toast.LENGTH_SHORT).show();
     }));
-    page.addView(actions);page.addView(web,new LinearLayout.LayoutParams(-1,0,1));
+    header.addView(actions);page.addView(web,new LinearLayout.LayoutParams(-1,0,1));
     host.pageCleanup.put(page,()->{web.stopLoading();web.destroy();});
     web.loadDataWithBaseURL("https://preview.invalid/",html(source),"text/html","UTF-8",null);
   }
