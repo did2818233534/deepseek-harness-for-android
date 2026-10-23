@@ -46,7 +46,16 @@ final class MessagePreview {
       button.setTooltipText(button.getContentDescription());
       LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(host.dp(48),host.dp(48));p.setMargins(host.dp(8),0,0,0);actions.addView(button,p);
     }
-    select.setOnClickListener(v->{web.requestFocus();web.evaluateJavascript("(function(){var r=document.createRange();r.selectNodeContents(document.querySelector('main'));var s=window.getSelection();var all=s.toString()===r.toString()&&s.toString().length>0;s.removeAllRanges();if(!all)s.addRange(r);return !all;})()",result->{boolean selected="true".equals(result);select.setContentDescription(selected?"全不选":"全选");select.setTooltipText(select.getContentDescription());select.setImageResource(selected?R.drawable.ic_deselect_all:R.drawable.ic_select_all);select.setColorFilter(selected?Color.WHITE:UiStyle.ACCENT);select.setBackground(host.ui.surface(selected?UiStyle.ACCENT:UiStyle.SURFACE,24));});});
+    select.setOnClickListener(v->{
+      // Selection.toString and Range.toString differ for rendered tables/line breaks.
+      // The displayed action defines intent; never infer it by comparing text.
+      boolean chooseAll=!select.isSelected();select.setEnabled(false);
+      if(chooseAll)web.requestFocus();
+      String script=chooseAll
+        ? "(function(){var s=window.getSelection(),r=document.createRange();r.selectNodeContents(document.querySelector('main'));s.removeAllRanges();s.addRange(r);return s.rangeCount>0&&!s.isCollapsed;})()"
+        : "(function(){window.getSelection().removeAllRanges();return false;})()";
+      web.evaluateJavascript(script,result->{boolean selected="true".equals(result);select.setSelected(selected);select.setEnabled(true);select.setContentDescription(selected?"全不选":"全选");select.setTooltipText(select.getContentDescription());select.setImageResource(selected?R.drawable.ic_deselect_all:R.drawable.ic_select_all);select.setColorFilter(selected?Color.WHITE:UiStyle.ACCENT);select.setBackground(host.ui.surface(selected?UiStyle.ACCENT:UiStyle.SURFACE,24));});
+    });
     copy.setOnClickListener(v->web.evaluateJavascript("window.getSelection().toString()",result->{
       String selected="";try{Object value=new org.json.JSONTokener(result).nextValue();if(value instanceof String)selected=(String)value;}catch(Exception ignored){}
       ((android.content.ClipboardManager)host.getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("消息",selected.isEmpty()?source:selected));Toast.makeText(host,selected.isEmpty()?"已复制完整 Markdown":"已复制选中文字",Toast.LENGTH_SHORT).show();

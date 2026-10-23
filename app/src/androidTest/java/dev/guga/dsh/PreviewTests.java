@@ -10,6 +10,12 @@ import org.junit.Test;
 import java.util.concurrent.*;
 
 public class PreviewTests {
+ static String js(WebView web,String script) throws Exception {
+  CountDownLatch done=new CountDownLatch(1);String[] result=new String[1];
+  InstrumentationRegistry.getInstrumentation().runOnMainSync(()->web.evaluateJavascript(script,v->{result[0]=v;done.countDown();}));
+  assertTrue(done.await(5,TimeUnit.SECONDS));return result[0];
+ }
+
  @Test public void tapPreviewSelectCopyBackAndLongPressRemainIndependent() throws Exception {
   var i=InstrumentationRegistry.getInstrumentation();var c=i.getTargetContext();
   dev.guga.updates.UpdateTestDriver.prefs(c).edit().putString("checkedDay",dev.guga.updates.UpdateTestDriver.today()).commit();
@@ -25,6 +31,18 @@ public class PreviewTests {
    CountDownLatch done=new CountDownLatch(1);String[] selected=new String[1];
    i.runOnMainSync(()->web[0].evaluateJavascript("window.getSelection().toString()",value->{selected[0]=value;done.countDown();}));
    assertTrue(done.await(5,TimeUnit.SECONDS));assertTrue("Full preview selection: "+selected[0],selected[0].contains("推荐渠道"));
+   View[] toggle=new View[1];
+   i.runOnMainSync(()->toggle[0]=((LinearLayout)((LinearLayout)((LinearLayout)a.currentPage).getChildAt(0)).getChildAt(2)).getChildAt(0));
+   for(int cycle=0;cycle<4;cycle++) {
+    i.runOnMainSync(()->toggle[0].performClick());Thread.sleep(150);
+    assertEquals("0",js(web[0],"window.getSelection().rangeCount"));
+    i.runOnMainSync(()->assertEquals("全选",toggle[0].getContentDescription().toString()));
+    // Simulate selection handles selecting just part of a paragraph.
+    js(web[0],"(function(){var r=document.createRange(),t=document.querySelector('h2').firstChild;r.setStart(t,0);r.setEnd(t,2);window.getSelection().addRange(r);return true;})()");
+    i.runOnMainSync(()->toggle[0].performClick());Thread.sleep(150);
+    assertTrue(js(web[0],"window.getSelection().toString()").contains("推荐渠道"));
+    i.runOnMainSync(()->assertEquals("全不选",toggle[0].getContentDescription().toString()));
+   }
    StreamingTests.screenshot(c,"message-preview.png");
    i.runOnMainSync(()->{((LinearLayout)((LinearLayout)((LinearLayout)a.currentPage).getChildAt(0)).getChildAt(2)).getChildAt(1).performClick();});Thread.sleep(200);
    i.runOnMainSync(()->{assertTrue(((ClipboardManager)c.getSystemService(Context.CLIPBOARD_SERVICE)).getPrimaryClip().getItemAt(0).getText().toString().contains("中文内容"));a.onBackPressed();assertSame(a.chatRoot,a.currentPage);});
