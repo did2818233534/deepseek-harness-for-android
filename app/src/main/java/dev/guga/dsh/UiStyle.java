@@ -18,7 +18,7 @@ final class UiStyle {
     GradientDrawable d = new GradientDrawable(); d.setColor(color); d.setCornerRadius(dp(radius)); return d;
   }
   RippleDrawable surface(int color, int radius) {
-    return new RippleDrawable(ColorStateList.valueOf(0x226750A4), shape(color, radius), null);
+    return new RippleDrawable(ColorStateList.valueOf(0x226750A4), shape(color, radius), shape(Color.WHITE, radius));
   }
   void action(Button button, boolean primary) {
     button.setAllCaps(false); button.setTextSize(15);

@@ -43,7 +43,7 @@ final class SvgPreview {
     doc.outputSettings().prettyPrint(false);return root.outerHtml();
   }
   static String html(String source) {
-    return "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><meta http-equiv='Content-Security-Policy' content=\"default-src 'none'; style-src 'unsafe-inline'; script-src 'none'\"><style>html,body{margin:0;min-height:100%;background:#fdfbff}body{display:grid;place-items:center;min-height:100vh}svg{max-width:100%;max-height:90vh;width:100%;height:auto}</style></head><body>"+sanitize(source)+"</body></html>";
+    return "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><meta http-equiv='Content-Security-Policy' content=\"default-src 'none'; style-src 'unsafe-inline'; script-src 'none'\"><style>*{-webkit-tap-highlight-color:transparent;}html,body{margin:0;min-height:100%;background:#fdfbff}body{display:grid;place-items:center;min-height:100vh}svg{max-width:100%;max-height:90vh;width:100%;height:auto}</style></head><body>"+sanitize(source)+"</body></html>";
   }
   static void open(MainActivity host,String source) {open(host,source,null);}
   static void open(MainActivity host,String source,String path) {

@@ -280,7 +280,7 @@ public final class MainActivity extends Activity {
     b.setMinimumHeight(dp(44));
     b.setMinHeight(dp(44));
     b.setBackground(new android.graphics.drawable.RippleDrawable(
-      android.content.res.ColorStateList.valueOf(0x184B5BDE), shape(UiStyle.SURFACE, UiStyle.CARD), null));
+      android.content.res.ColorStateList.valueOf(0x226750A4), shape(UiStyle.SURFACE, UiStyle.CARD), shape(Color.WHITE, 24)));
     b.setOnClickListener(click);
     return b;
   }
@@ -292,7 +292,7 @@ public final class MainActivity extends Activity {
     b.setPadding(dp(12), dp(12), dp(12), dp(12));
     b.setScaleType(ImageView.ScaleType.FIT_CENTER);
     b.setContentDescription(description);
-    b.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x206750A4), shape(Color.TRANSPARENT, 24), null));
+    b.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x206750A4), shape(Color.TRANSPARENT, 24), shape(Color.WHITE, 24)));
     b.setOnClickListener(click);
     return b;
   }
@@ -331,12 +331,12 @@ public final class MainActivity extends Activity {
     panel.setPadding(dp(16), dp(24), dp(16), dp(16));
     panel.setBackground(shape(bg, 24));
     TextView title = label(archived ? "已归档" : "对话", 24, ink);
-    title.setPadding(dp(8), 0, 0, dp(24));
+    title.setPadding(dp(8), 0, 0, dp(12));
     panel.addView(title);
     ScrollView scrollList = new ScrollView(this);
     LinearLayout list = new LinearLayout(this);
     list.setOrientation(LinearLayout.VERTICAL);
-    list.setPadding(0, dp(16), 0, dp(16));
+    list.setPadding(0, dp(4), 0, dp(12));
     scrollList.addView(list);
     panel.addView(scrollList, new LinearLayout.LayoutParams(-1, 0, 1));
     LinearLayout footer = row();
@@ -377,12 +377,12 @@ public final class MainActivity extends Activity {
             item.setEllipsize(android.text.TextUtils.TruncateAt.END);
             LinearLayout entry = row();
             item.setBackground(new android.graphics.drawable.RippleDrawable(
-              android.content.res.ColorStateList.valueOf(0x226750A4), shape(Color.TRANSPARENT, 16), null));
+              android.content.res.ColorStateList.valueOf(0x226750A4), shape(Color.TRANSPARENT, 16), shape(Color.WHITE, 24)));
             if (currentId.equals(session.optString("id"))) {
               item.setTextColor(accent);
               item.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
             }
-            entry.addView(item, new LinearLayout.LayoutParams(0, dp(52), 1));
+            entry.addView(item, new LinearLayout.LayoutParams(0, dp(48), 1));
             ImageButton archive = icon(archived ? R.drawable.ic_restore : R.drawable.ic_archive, archived ? "恢复对话" : "归档对话", v -> {
               archiveSession(session, archived, () -> list.removeView(entry));
             });
@@ -394,8 +394,8 @@ public final class MainActivity extends Activity {
             delete.setImageTintList(android.content.res.ColorStateList.valueOf(0xFFC64040));
             delete.setTooltipText("删除对话");
             entry.addView(delete, new LinearLayout.LayoutParams(dp(48), dp(48)));
-            LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, dp(56));
-            rowParams.bottomMargin = dp(12);
+            LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, dp(48));
+            rowParams.bottomMargin = dp(2);
             list.addView(entry, rowParams);
           }
         });
@@ -674,7 +674,7 @@ public final class MainActivity extends Activity {
     LinearLayout header = row();
     ImageButton back = icon(R.drawable.ic_back, "返回", v -> onBackPressed());
     back.setBackground(new android.graphics.drawable.RippleDrawable(
-      android.content.res.ColorStateList.valueOf(0x226750A4), shape(0xFFECE6F0, 24), null));
+      android.content.res.ColorStateList.valueOf(0x226750A4), shape(0xFFECE6F0, 24), shape(Color.WHITE, 24)));
     header.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
     page.addView(header);
     TextView heading = label(title, 32, ink);
@@ -721,7 +721,7 @@ public final class MainActivity extends Activity {
     action.setTextColor(primary ? Color.WHITE : ink);
     action.setBackground(new android.graphics.drawable.RippleDrawable(
       android.content.res.ColorStateList.valueOf(0x226750A4),
-      shape(primary ? accent : 0xFFECE6F0, 16), null));
+      shape(primary ? accent : 0xFFECE6F0, 16), shape(Color.WHITE, 24)));
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(52));
     lp.topMargin = dp(12);
     lp.bottomMargin = dp(12);
@@ -761,7 +761,7 @@ public final class MainActivity extends Activity {
     float top = dp(first ? 24 : 4), bottom = dp(last ? 24 : 4);
     surface.setCornerRadii(new float[] {top, top, top, top, bottom, bottom, bottom, bottom});
     entry.setBackground(new android.graphics.drawable.RippleDrawable(
-      android.content.res.ColorStateList.valueOf(0x226750A4), surface, null));
+      android.content.res.ColorStateList.valueOf(0x226750A4), surface, shape(Color.WHITE, 24)));
     entry.setOnClickListener(click);
     entry.setFocusable(true);
     entry.setContentDescription(title);

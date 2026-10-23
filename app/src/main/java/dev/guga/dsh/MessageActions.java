@@ -43,7 +43,7 @@ final class MessageActions {
     LinkedHashSet<String> ids=new LinkedHashSet<>();
     for(Map.Entry<String,ChatTurnView> e:host.turnViews.entrySet()) {
       if((e.getValue().user.getVisibility()==View.VISIBLE||e.getValue().attachmentRow.getChildCount()>0))ids.add(e.getKey()+"/u");
-      if(e.getValue().answer.getVisibility()==View.VISIBLE||e.getValue().outputFiles.getChildCount()>0)ids.add(e.getKey()+"/a");
+      if(e.getValue().answer.getVisibility()==View.VISIBLE||e.getValue().svgContent.getVisibility()==View.VISIBLE||e.getValue().outputFiles.getChildCount()>0)ids.add(e.getKey()+"/a");
     }
     return ids;
   }

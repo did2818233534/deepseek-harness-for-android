@@ -14,7 +14,7 @@ final class InlineSvgView extends FrameLayout {
   void sync(){
     android.graphics.Rect rect=new android.graphics.Rect();boolean visible=isAttachedToWindow()&&getWindowVisibility()==VISIBLE&&getGlobalVisibleRect(rect);
     if(!visible){release();return;}
-    if(web==null&&html!=null){web=new WebView(host);web.setBackgroundColor(UiStyle.LOW);web.getSettings().setJavaScriptEnabled(false);web.getSettings().setAllowFileAccess(false);web.getSettings().setAllowContentAccess(false);web.getSettings().setBlockNetworkLoads(true);web.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);addView(web,0,new LayoutParams(-1,-1));web.loadDataWithBaseURL("https://svg.invalid/",html,"text/html","UTF-8",null);}
+    if(web==null&&html!=null){web=new WebView(host);web.setBackgroundColor(android.graphics.Color.TRANSPARENT);web.getSettings().setJavaScriptEnabled(false);web.getSettings().setAllowFileAccess(false);web.getSettings().setAllowContentAccess(false);web.getSettings().setBlockNetworkLoads(true);web.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);addView(web,0,new LayoutParams(-1,-1));web.loadDataWithBaseURL("https://svg.invalid/",html,"text/html","UTF-8",null);}
   }
   void release(){if(web!=null){removeView(web);web.stopLoading();web.destroy();web=null;}}
   @Override protected void onAttachedToWindow(){super.onAttachedToWindow();getViewTreeObserver().addOnScrollChangedListener(scrollListener);post(this::sync);}
