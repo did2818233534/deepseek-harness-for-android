@@ -165,6 +165,7 @@ async function start() {
   child = spawn(
     process.env.TEST_NODE || process.execPath,
     [
+      "--require", path.resolve("tests/legacy-node.cjs"),
       "app/src/main/assets/runtime/main.cjs",
       root,
       String(bridge.address().port),

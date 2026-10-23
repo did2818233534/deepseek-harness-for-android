@@ -42,6 +42,15 @@ public class CompactionTests {
       assertEquals("文档处理任务",done.optString("title"));assertEquals("",done.optString("lastError"));assertEquals(4,calls.get());assertEquals(1,summaries.get());assertEquals(2,done.getJSONArray("turns").length());
       i.runOnMainSync(()->{a.render(done);assertEquals("文档处理任务",a.chatTitle.getText().toString());ChatTurnView v=a.turnViews.values().stream().reduce((first,second)->second).get();assertEquals(View.GONE,v.details.getVisibility());v.header.performClick();assertTrue(v.steps.getText().toString().contains("整理上下文"));});
       StreamingTests.screenshot(c,"compaction-completed.png");
+      // Changing tool availability replaces the system prompt: token-meter used Array.with here.
+      new Settings(c).saveWeb(true,true);
+      Api.call("/send",new JSONObject().put("text","启用联网工具后继续"));
+      JSONObject refreshed=StreamingTests.awaitState("启用联网工具后继续",false);
+      assertEquals("",refreshed.optString("lastError"));assertEquals(5,calls.get());
+      new Settings(c).saveWeb(false,false);
+      Api.call("/send",new JSONObject().put("text","关闭联网工具后再次继续"));
+      JSONObject refreshedAgain=StreamingTests.awaitState("关闭联网工具后再次继续",false);
+      assertEquals("",refreshedAgain.optString("lastError"));assertEquals(6,calls.get());
       assertTrue(MainActivity.readableError("{\"kind\":\"max-tokens\"}").contains("输出上限"));
     } finally {
       bridge.api=prior;c.getSharedPreferences("settings",0).edit().clear().commit();i.runOnMainSync(a::finish);

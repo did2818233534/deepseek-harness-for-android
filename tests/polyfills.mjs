@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+delete Array.prototype.with;
+await import('data:text/javascript;base64,'+Buffer.from(fs.readFileSync(new URL('../runtime/polyfills.ts',import.meta.url),'utf8')).toString('base64'));
+const original=Object.freeze([1,2,3]);
+assert.deepEqual(original.with(1,9),[1,9,3]);assert.deepEqual(original,[1,2,3]);
+assert.deepEqual(original.with(-1,9),[1,2,9]);assert.deepEqual(original.with(-3,9),[9,2,3]);
+assert.deepEqual(original.with(NaN,9),[9,2,3]);
+assert.deepEqual(original.with(1.7,9),[1,9,3]);
+for(const index of [3,-4,Infinity,-Infinity])assert.throws(()=>original.with(index,0),RangeError);
+assert.throws(()=>[].with(0,0),RangeError);
+assert.throws(()=>original.with(1n,0),TypeError);
+assert.deepEqual([,2].with(1,3),[undefined,3]);
+assert.deepEqual(Array.prototype.with.call({0:'a',1:'b',length:2},0,'c'),['c','b']);
+const getters={length:1,get 0(){throw Error('replaced index must not be read');}};
+assert.deepEqual(Array.prototype.with.call(getters,0,'replacement'),['replacement']);
+console.log('PASS: Array.with compatibility, immutable updates, negative/fractional/invalid indices, sparse arrays and getters');

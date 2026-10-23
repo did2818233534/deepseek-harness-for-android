@@ -156,3 +156,14 @@ API Key 输入框以等长密码圆点显示已保存密钥，移除已保存提
 ### 上下文压缩验证
 
 `tests/runtime.mjs` 覆盖主动压力压缩、上下文溢出恢复、重启后摘要复用、工具结果精简、摘要失败、取消后继续和持续失败时停止重试。`CompactionTests` 通过 Android HTTP 桥和实际内嵌 Node 运行同一流程，并检查聊天记录及折叠过程显示；模型响应均为本地模拟，没有调用付费 API。
+
+### 安卓运行时兼容性回归
+
+手机内嵌 Node 18，桌面新版 Node 自带的方法不能视为手机也支持。`runtime/polyfills.ts` 提供实际用到的数组不可变操作、Promise.withResolvers 和释放符号兼容层。`tests/legacy-node.cjs` 在测试子进程中移除新版方法，强制走兼容路径；另需使用真正的 Node 18 运行核心测试：
+
+```sh
+/usr/bin/node tests/polyfills.mjs
+TEST_NODE=/usr/bin/node node tests/runtime.mjs
+```
+
+其中 `/usr/bin/node` 应为 Node 18；其他环境替换成对应路径。Android 的 `CompactionTests` 覆盖联网工具开关变更后连续两次更新系统提示并继续对话，防止 token-meter 的系统消息替换路径再次遗漏。

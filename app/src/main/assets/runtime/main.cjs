@@ -18354,6 +18354,21 @@ if (!Array.prototype.toSpliced) Object.defineProperty(Array.prototype, "toSplice
     return copy;
   }
 });
+if (!Array.prototype.with) Object.defineProperty(Array.prototype, "with", {
+  configurable: true,
+  writable: true,
+  value: function (index, value) {
+    if (this == null) throw new TypeError("Array.with called on null or undefined");
+    const source = Object(this);
+    const length = Math.min(Math.max(Math.trunc(+source.length) || 0, 0), Number.MAX_SAFE_INTEGER);
+    const integer2 = Math.trunc(+index) || 0;
+    const actual = integer2 < 0 ? length + integer2 : integer2;
+    if (actual < 0 || actual >= length) throw new RangeError("Array.with index out of range");
+    const result = new Array(length);
+    for (let i = 0; i < length; i++) result[i] = i === actual ? value : source[i];
+    return result;
+  }
+});
 if (!Promise.withResolvers) Promise.withResolvers = function () {
   let resolve2, reject;
   const promise2 = new Promise((a, b) => {
