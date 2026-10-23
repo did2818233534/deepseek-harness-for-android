@@ -42,9 +42,10 @@ final class MessageActions {
   }
   LinkedHashSet<String> selectableIds(){
     LinkedHashSet<String> ids=new LinkedHashSet<>();
-    for(Map.Entry<String,ChatTurnView> e:host.turnViews.entrySet()) {
-      if((e.getValue().user.getVisibility()==View.VISIBLE||e.getValue().attachmentRow.getChildCount()>0))ids.add(e.getKey()+"/u");
-      if(e.getValue().answer.getVisibility()==View.VISIBLE||e.getValue().svgContent.getVisibility()==View.VISIBLE||e.getValue().outputFiles.getChildCount()>0)ids.add(e.getKey()+"/a");
+    for(int n=0;n<host.transcriptTurns.length();n++){
+      JSONObject turn=host.transcriptTurns.optJSONObject(n);if(turn==null)continue;String id=turn.optString("id",String.valueOf(n));
+      if(!turn.optString("userText").isEmpty()||(turn.optJSONArray("attachments")!=null&&turn.optJSONArray("attachments").length()>0))ids.add(id+"/u");
+      if(!turn.optString("text").isEmpty()||ArtifactViews.collect(turn).length()>0)ids.add(id+"/a");
     }
     return ids;
   }
@@ -52,6 +53,7 @@ final class MessageActions {
   void toggle(String id){selecting=true;if(!selected.remove(id))selected.add(id);refresh();}
   void clear(){selecting=false;selected.clear();refresh();}
   void refresh(){bar.setVisibility(active()?View.VISIBLE:View.GONE);host.composer.setVisibility(active()?View.GONE:View.VISIBLE);
+    if(!active()){for(ChatTurnView view:host.turnViews.values())view.selection();return;}
     count.setText("已选择 "+selected.size()+" 条消息");updateForkEnabled();
     LinkedHashSet<String> ids=selectableIds();all.setText(!ids.isEmpty()&&selected.containsAll(ids)?"取消全选":"全选");
     for(Button b:new Button[]{share,save,copy}){b.setEnabled(!selected.isEmpty());b.setAlpha(selected.isEmpty()?.4f:1f);}
@@ -66,12 +68,24 @@ final class MessageActions {
     try {host.request("/session/fork",new JSONObject().put("turnId",key.substring(0,slash)).put("includeAssistant",key.endsWith("/a")),()->{clear();host.revision=-1;host.currentId="";host.toast("已创建分支，原对话已保留");});}
     catch(Exception e){host.toast(e.getMessage());}
   }
-  String selectedSource(){
+  static String userSource(JSONObject turn){
+    StringBuilder out=new StringBuilder(turn.optString("userText"));JSONArray files=turn.optJSONArray("attachments");
+    if(files!=null)for(int n=0;n<files.length();n++){JSONObject file=files.optJSONObject(n);if(file!=null)out.append("\n附件：").append(file.optString("name"));}return out.toString();
+  }
+  static String assistantSource(JSONObject turn){
+    StringBuilder out=new StringBuilder(turn.optString("text"));JSONArray files=ArtifactViews.collect(turn);
+    for(int n=0;n<files.length();n++){JSONObject f=files.optJSONObject(n);String path=f.optString("path");
+      if(WorkspaceFiles.linkPath(path)!=null)out.append("\n\n[").append(f.optString("name",path).replace("[","\\[").replace("]","\\]")).append("](").append(Uri.encode(path,"/")).append(")");
+    }return out.toString();
+  }
+  String selectedSource(){return selectionText(false);}
+  String selectionText(boolean headings){
     StringBuilder out=new StringBuilder();
-    for(Map.Entry<String,ChatTurnView> entry:host.turnViews.entrySet()){
-      ChatTurnView v=entry.getValue();
-      if(selected.contains(entry.getKey()+"/u")){if(out.length()>0)out.append("\n\n");out.append(v.user.getText()).append(v.attachmentSummary());}
-      if(selected.contains(entry.getKey()+"/a")){if(out.length()>0)out.append("\n\n");out.append(v.markdown.source==null?"":v.markdown.source).append(v.outputSummary());}
+    for(int n=0;n<host.transcriptTurns.length();n++){
+      JSONObject turn=host.transcriptTurns.optJSONObject(n);if(turn==null)continue;String id=turn.optString("id",String.valueOf(n));
+      for(boolean mine:new boolean[]{true,false})if(selected.contains(id+(mine?"/u":"/a"))){
+        if(out.length()>0)out.append("\n\n");if(headings)out.append(mine?"## 用户\n\n":"## 助手\n\n");out.append(mine?userSource(turn):assistantSource(turn));
+      }
     }return out.toString();
   }
   void copySelected(){
@@ -79,14 +93,7 @@ final class MessageActions {
     copy.setText("已复制");copy.removeCallbacks(resetCopy);copy.postDelayed(resetCopy,1600);
   }
   final Runnable resetCopy=()->{if(copy!=null)copy.setText("复制");};
-  String markdown(){
-    StringBuilder md=new StringBuilder("# ").append(host.chatTitle.getText().toString().replace('\n',' ')).append("\n\n");
-    for(Map.Entry<String,ChatTurnView> entry:host.turnViews.entrySet()){
-      ChatTurnView v=entry.getValue();if(selected.contains(entry.getKey()+"/u"))md.append("## 用户\n\n").append(v.user.getText()).append(v.attachmentSummary()).append("\n\n");
-      if(selected.contains(entry.getKey()+"/a"))md.append("## 助手\n\n").append(v.markdown.source==null?"":v.markdown.source).append(v.outputSummary()).append("\n\n");
-    }
-    return md.toString();
-  }
+  String markdown(){return "# "+host.chatTitle.getText().toString().replace('\n',' ')+"\n\n"+selectionText(true)+"\n\n";}
   static File write(Context c,String markdown) throws IOException {
     File dir=ChatShareProvider.directory(c);if(!dir.isDirectory()&&!dir.mkdirs())throw new IOException("无法创建分享文件");
     File[] old=dir.listFiles();if(old!=null)for(File file:old)if(file.lastModified()<System.currentTimeMillis()-7*86400000L)file.delete();

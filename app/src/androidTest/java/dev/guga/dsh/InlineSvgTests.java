@@ -59,8 +59,9 @@ public class InlineSvgTests {
     MainActivity a=(MainActivity)i.startActivitySync(new android.content.Intent(c,MainActivity.class).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
     InlineSvgView[] preview=new InlineSvgView[1];android.webkit.WebView[] renderer=new android.webkit.WebView[1];
     try{
-      i.runOnMainSync(()->{a.visible=false;a.handler.removeCallbacks(a.poll);a.messages.removeAllViews();preview[0]=new InlineSvgView(a);a.messages.addView(preview[0],new android.widget.LinearLayout.LayoutParams(a.dp(200),a.dp(200)));preview[0].content(svg);a.messages.addView(new View(a),new android.widget.LinearLayout.LayoutParams(1,a.dp(4000)));a.scroll.scrollTo(0,0);});
-      i.waitForIdleSync();Thread.sleep(250);
+      i.runOnMainSync(()->{a.visible=false;a.handler.removeCallbacks(a.poll);});i.waitForIdleSync();
+      i.runOnMainSync(()->{a.messages.removeAllViews();preview[0]=new InlineSvgView(a);a.messages.addView(preview[0],new android.widget.LinearLayout.LayoutParams(a.dp(200),a.dp(200)));preview[0].content(svg);a.messages.addView(new View(a),new android.widget.LinearLayout.LayoutParams(1,a.dp(4000)));a.scroll.scrollTo(0,0);});
+      i.waitForIdleSync();i.runOnMainSync(()->a.scroll.scrollTo(0,0));Thread.sleep(250);
       i.runOnMainSync(()->{assertNotNull(preview[0].web);renderer[0]=preview[0].web;a.scroll.scrollTo(0,a.dp(260));});i.waitForIdleSync();Thread.sleep(250);
       i.runOnMainSync(()->{assertSame("Nearby scrolling must not recreate WebView",renderer[0],preview[0].web);a.scroll.scrollTo(0,a.dp(3500));});i.waitForIdleSync();Thread.sleep(250);
       i.runOnMainSync(()->{assertNull("Distant SVG releases renderer",preview[0].web);a.scroll.scrollTo(0,0);});i.waitForIdleSync();Thread.sleep(250);

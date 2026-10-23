@@ -39,7 +39,7 @@ public class AttachmentTests {
         JSONArray sent=a.attachments.snapshot();a.attachments.clearSent(sent);assertEquals(0,a.attachments.pending.size());
       });
       i.runOnMainSync(()->{try{
-        ChatTurnView turn=new ChatTurnView(a);turn.update(new JSONObject().put("id","attachment-only").put("userText","").put("attachments",new JSONArray().put(item)));a.turnViews.clear();a.turnViews.put("attachment-only",turn);a.messages.removeAllViews();a.messages.addView(turn);
+        a.render(new JSONObject().put("id","attachment-only-session").put("revision",99001).put("turns",new JSONArray().put(new JSONObject().put("id","attachment-only").put("userText","").put("attachments",new JSONArray().put(item)))));ChatTurnView turn=a.turnViews.get("attachment-only");
         assertEquals(View.GONE,turn.user.getVisibility());assertEquals(1,turn.attachmentRow.getChildCount());a.messageActions.selectAll();assertTrue(a.messageActions.selected.contains("attachment-only/u"));assertTrue(a.messageActions.markdown().contains("attachment-test.png"));a.messageActions.selectAll();assertTrue(a.messageActions.selected.isEmpty());a.messageActions.selectAll();assertEquals(1,a.messageActions.selected.size());a.messageActions.clear();
       }catch(Exception e){throw new RuntimeException(e);}});
       Thread.sleep(250);i.waitForIdleSync();

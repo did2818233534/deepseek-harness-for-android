@@ -17,7 +17,7 @@ public class TranscriptPerformanceTests {
   try{
    i.runOnMainSync(()->{a.visible=false;a.handler.removeCallbacks(a.poll);long start=System.nanoTime();a.render(first);time[0]=System.nanoTime()-start;});i.waitForIdleSync();
    i.runOnMainSync(()->a.render(second));i.waitForIdleSync();
-   i.runOnMainSync(()->{long start=System.nanoTime();a.render(first);time[1]=System.nanoTime()-start;assertEquals(35,a.turnViews.size());});i.waitForIdleSync();
+   i.runOnMainSync(()->{long start=System.nanoTime();a.render(first);time[1]=System.nanoTime()-start;assertEquals(MainActivity.HISTORY_BATCH,a.turnViews.size());});i.waitForIdleSync();
    android.util.Log.i("DSH-Perf","coldMs="+time[0]/1000000.0+" repeatMs="+time[1]/1000000.0);
   }finally{i.runOnMainSync(a::finish);}
  }

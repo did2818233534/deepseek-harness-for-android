@@ -55,6 +55,10 @@ public final class MainActivity extends Activity {
   boolean visible, busy, polling;
   final Map<String, ChatTurnView> turnViews = new LinkedHashMap<>();
   TextView turnError;
+  static final int HISTORY_BATCH=6;
+  JSONArray transcriptTurns=new JSONArray();
+  int historyStart,historyGeneration;
+  boolean historyLoading;
   final TranscriptViews transcriptViews=new TranscriptViews(this);
   long revision = -1;
   String currentId = "",
@@ -159,7 +163,7 @@ public final class MainActivity extends Activity {
     header.addView(heading, new LinearLayout.LayoutParams(0, -2, 1));
     header.addView(icon(R.drawable.ic_new_chat, "新对话", v -> newChat()), new LinearLayout.LayoutParams(dp(48), dp(48)));
     root.addView(header);
-    scroll = new ScrollView(this);
+    scroll = new HistoryScrollView(this);
     scroll.setFillViewport(true);
     scroll.setVerticalScrollBarEnabled(false);
     messages = new LinearLayout(this);
@@ -626,24 +630,54 @@ public final class MainActivity extends Activity {
 
   void renderTurns(JSONObject state, boolean changed, boolean atBottom) {
     JSONArray turns=state.optJSONArray("turns");
-    if(changed) transcriptViews.activate(state.optString("id"));
-    if(turnViews.size()>turns.length()) {messageActions.clear();messages.removeAllViews();turnViews.clear();turnError=null;}
+    if(changed){
+      historyGeneration++;historyLoading=false;
+      ((HistoryScrollView)scroll).resetHistoryGesture();
+      transcriptViews.activate(state.optString("id"));
+      historyStart=Math.max(0,turns.length()-HISTORY_BATCH);
+    }else if(turns.length()<transcriptTurns.length())historyStart=Math.max(0,turns.length()-HISTORY_BATCH);
+    transcriptTurns=turns;
     chatTitle.setText((!state.optString("title").isEmpty()?state.optString("title"):turns.length()==0?"新对话":turns.optJSONObject(0).optString("userText","新对话"))+(state.optBoolean("isBranch")?" · 分支":""));
-    Set<String> ids=new HashSet<>();
-    for(int n=0;n<turns.length();n++) {
-      JSONObject turn=turns.optJSONObject(n); if(turn==null) continue;
-      String id=turn.optString("id",String.valueOf(n)); ids.add(id);
-      ChatTurnView view=turnViews.get(id);
-      if(view==null) {view=new ChatTurnView(this);turnViews.put(id,view);messages.addView(view,n,new LinearLayout.LayoutParams(-1,-2));}
-      view.update(turn);
-    }
-    for(String id:new ArrayList<>(turnViews.keySet())) if(!ids.contains(id)) messages.removeView(turnViews.remove(id));
+    renderVisibleTurns();
     String error=state.optString("lastError");
     if(turnError==null) {turnError=label("",14,UiStyle.DANGER); turnError.setPadding(dp(14),dp(8),dp(14),dp(14));messages.addView(turnError);}
     ChatTurnView.text(turnError,readableError(error));
     if(messageActions.active())messageActions.updateForkEnabled();
     if(turns.length()==0&&!busy) scroll.post(() -> scroll.scrollTo(0,0));
-    else if(atBottom||changed) scroll.post(() -> scroll.scrollTo(0,Math.max(0,messages.getHeight()-scroll.getHeight())));
+    else if((atBottom||changed)&&!historyLoading){int generation=historyGeneration;scroll.post(() -> {if(generation==historyGeneration&&!historyLoading)scroll.scrollTo(0,Math.max(0,messages.getHeight()-scroll.getHeight()));});}
+  }
+
+  void renderVisibleTurns(){
+    LinkedHashMap<String,ChatTurnView> ordered=new LinkedHashMap<>();
+    for(int n=historyStart;n<transcriptTurns.length();n++){
+      JSONObject turn=transcriptTurns.optJSONObject(n);if(turn==null)continue;
+      String id=turn.optString("id",String.valueOf(n));ChatTurnView view=turnViews.get(id);
+      if(view==null)view=new ChatTurnView(this);
+      ordered.put(id,view);view.update(turn);
+    }
+    for(String id:new ArrayList<>(turnViews.keySet()))if(!ordered.containsKey(id))messages.removeView(turnViews.get(id));
+    int index=0;for(ChatTurnView view:ordered.values()){
+      if(view.getParent()==null)messages.addView(view,index,new LinearLayout.LayoutParams(-1,-2));
+      else if(messages.indexOfChild(view)!=index){messages.removeView(view);messages.addView(view,index);}
+      index++;
+    }
+    turnViews.clear();turnViews.putAll(ordered);
+  }
+
+  boolean loadOlderTurns(){
+    if(historyLoading||historyStart<=0||turnViews.isEmpty()||currentPage!=chatRoot)return false;
+    historyLoading=true;int generation=historyGeneration;
+    View anchor=turnViews.values().iterator().next();int offset=anchor.getTop()-scroll.getScrollY();
+    LinearLayout body=messages;
+    body.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener(){
+      public boolean onPreDraw(){
+        if(body.getViewTreeObserver().isAlive())body.getViewTreeObserver().removeOnPreDrawListener(this);
+        if(generation==historyGeneration&&messages==body){scroll.scrollTo(0,Math.max(0,anchor.getTop()-offset));historyLoading=false;}
+        return true;
+      }
+    });
+    historyStart=Math.max(0,historyStart-HISTORY_BATCH);renderVisibleTurns();body.requestLayout();
+    return true;
   }
 
   static String readableError(String raw) {
