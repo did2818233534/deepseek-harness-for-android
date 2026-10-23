@@ -37,14 +37,16 @@ final class MessagePreview {
       }
     });
     LinearLayout actions=host.row();actions.setGravity(Gravity.END);actions.setPadding(0,host.dp(2),0,host.dp(2));
-    Button select=new Button(host);select.setText("全选");host.ui.action(select,false);
-    Button copy=new Button(host);copy.setText("复制");host.ui.action(copy,false);
-    for(Button button:new Button[]{select,copy}){
-      button.setTextSize(13);button.setMinWidth(0);button.setMinimumWidth(0);button.setPadding(host.dp(14),0,host.dp(14),0);button.setElevation(0);button.setStateListAnimator(null);
-      button.setBackground(new android.graphics.drawable.InsetDrawable(host.ui.surface(UiStyle.SURFACE,18),0,host.dp(7),0,host.dp(7)));
-      LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-2,host.dp(48));p.setMargins(host.dp(8),0,0,0);actions.addView(button,p);
+    ImageButton select=host.icon(R.drawable.ic_select_all,"全选",v->{});
+    ImageButton copy=host.icon(R.drawable.ic_copy,"复制",v->{});
+    for(ImageButton button:new ImageButton[]{select,copy}){
+      button.setColorFilter(UiStyle.ACCENT);button.setPadding(host.dp(12),host.dp(12),host.dp(12),host.dp(12));
+      button.setScaleType(ImageView.ScaleType.FIT_CENTER);
+      button.setBackground(host.ui.surface(UiStyle.SURFACE,24));
+      button.setTooltipText(button.getContentDescription());
+      LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(host.dp(48),host.dp(48));p.setMargins(host.dp(8),0,0,0);actions.addView(button,p);
     }
-    select.setOnClickListener(v->{web.requestFocus();web.evaluateJavascript("(function(){var r=document.createRange();r.selectNodeContents(document.querySelector('main'));var s=window.getSelection();var all=s.toString()===r.toString()&&s.toString().length>0;s.removeAllRanges();if(!all)s.addRange(r);return !all;})()",result->select.setText("true".equals(result)?"全不选":"全选"));});
+    select.setOnClickListener(v->{web.requestFocus();web.evaluateJavascript("(function(){var r=document.createRange();r.selectNodeContents(document.querySelector('main'));var s=window.getSelection();var all=s.toString()===r.toString()&&s.toString().length>0;s.removeAllRanges();if(!all)s.addRange(r);return !all;})()",result->{boolean selected="true".equals(result);select.setContentDescription(selected?"全不选":"全选");select.setTooltipText(select.getContentDescription());select.setImageResource(selected?R.drawable.ic_deselect_all:R.drawable.ic_select_all);select.setColorFilter(selected?Color.WHITE:UiStyle.ACCENT);select.setBackground(host.ui.surface(selected?UiStyle.ACCENT:UiStyle.SURFACE,24));});});
     copy.setOnClickListener(v->web.evaluateJavascript("window.getSelection().toString()",result->{
       String selected="";try{Object value=new org.json.JSONTokener(result).nextValue();if(value instanceof String)selected=(String)value;}catch(Exception ignored){}
       ((android.content.ClipboardManager)host.getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("消息",selected.isEmpty()?source:selected));Toast.makeText(host,selected.isEmpty()?"已复制完整 Markdown":"已复制选中文字",Toast.LENGTH_SHORT).show();
