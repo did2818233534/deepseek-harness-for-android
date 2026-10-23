@@ -26,7 +26,11 @@ final class ChatMarkdown {
   void update(TextView view,String markdown) {
     if(!markdown.equals(source)) {
       source=markdown;
-      view.setText(renderer.toMarkdown(markdown));
+      // Table rows discover wrapped cell heights during drawing. Markwon's
+      // afterSetText hook attaches the invalidator that remeasures those rows.
+      renderer.setParsedMarkdown(view,renderer.toMarkdown(markdown));
+      // Keep our short-tap links and long-press message selection behavior.
+      view.setMovementMethod(null);
     }
     view.setVisibility(markdown.isEmpty()?android.view.View.GONE:android.view.View.VISIBLE);
   }
