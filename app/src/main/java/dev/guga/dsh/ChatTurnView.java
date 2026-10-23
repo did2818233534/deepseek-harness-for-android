@@ -43,8 +43,8 @@ final class ChatTurnView extends LinearLayout {
     ChatMarkdown.links(answer,host);
     user.setOnLongClickListener(v -> {host.messageActions.toggle(turnId+"/u");return true;});
     answer.setOnLongClickListener(v -> {host.messageActions.toggle(turnId+"/a");return true;});
-    user.setOnClickListener(v -> {if(host.messageActions.active())host.messageActions.toggle(turnId+"/u");});
-    answer.setOnClickListener(v -> {if(host.messageActions.active())host.messageActions.toggle(turnId+"/a");});
+    user.setOnClickListener(v -> {if(host.messageActions.active())host.messageActions.toggle(turnId+"/u");else MessagePreview.open(host,user.getText().toString());});
+    answer.setOnClickListener(v -> {if(host.messageActions.active())host.messageActions.toggle(turnId+"/a");else MessagePreview.open(host,markdown.source==null?"":markdown.source);});
     waiting=host.label("正在请求模型…",13,host.muted); waiting.setPadding(host.dp(14),host.dp(4),0,host.dp(14));
     addView(waiting,new LayoutParams(-2,-2));
   }

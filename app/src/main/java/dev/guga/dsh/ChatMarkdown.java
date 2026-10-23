@@ -19,8 +19,20 @@ final class ChatMarkdown {
   String source;
   ChatMarkdown(Context context) {
     renderer=Markwon.builder(context)
+      .usePlugin(new io.noties.markwon.AbstractMarkwonPlugin(){
+        @Override public void configureTheme(io.noties.markwon.core.MarkwonTheme.Builder b){
+          float d=context.getResources().getDisplayMetrics().density;
+          b.headingTextSizeMultipliers(new float[]{1.35f,1.22f,1.12f,1.06f,1f,1f})
+            .headingBreakHeight(0).thematicBreakHeight(Math.max(1,(int)d)).thematicBreakColor(0xFFDCD5E5)
+            .blockMargin((int)(16*d)).bulletWidth((int)(4*d)).blockQuoteWidth((int)(3*d)).blockQuoteColor(0xFFB6A4D4)
+            .codeBackgroundColor(0xFFE8E1F0).codeBlockBackgroundColor(0xFFE8E1F0).codeTextColor(0xFF51416D)
+            .linkColor(UiStyle.ACCENT).isLinkUnderlined(false);
+        }
+      })
       .usePlugin(StrikethroughPlugin.create())
-      .usePlugin(TablePlugin.create(context))
+      .usePlugin(TablePlugin.create(b->b.tableBorderColor(0xFFDCD5E5).tableBorderWidth(1)
+        .tableCellPadding((int)(8*context.getResources().getDisplayMetrics().density))
+        .tableHeaderRowBackgroundColor(0xFFE8E1F0).tableOddRowBackgroundColor(0x0C6750A4)))
       .usePlugin(TaskListPlugin.create(context)).build();
   }
   void update(TextView view,String markdown) {
@@ -31,6 +43,8 @@ final class ChatMarkdown {
       renderer.setParsedMarkdown(view,renderer.toMarkdown(markdown));
       // Keep our short-tap links and long-press message selection behavior.
       view.setMovementMethod(null);
+      view.setClickable(true);
+      view.setLongClickable(true);
     }
     view.setVisibility(markdown.isEmpty()?android.view.View.GONE:android.view.View.VISIBLE);
   }
