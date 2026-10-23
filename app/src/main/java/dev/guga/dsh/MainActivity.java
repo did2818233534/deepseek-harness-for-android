@@ -22,7 +22,7 @@ import org.json.*;
 public final class MainActivity extends Activity {
 
   static final int IMPORT = 10,
-    EXPORT = 11, IMPORT_IMAGE = 12;
+    EXPORT = 11, IMPORT_IMAGE = 13;
   final int ink = Color.rgb(30, 34, 43),
     muted = Color.rgb(127, 132, 144),
     accent = Color.rgb(103, 80, 164),
@@ -615,7 +615,7 @@ public final class MainActivity extends Activity {
   void renderTurns(JSONObject state, boolean changed, boolean atBottom) {
     JSONArray turns=state.optJSONArray("turns");
     if(changed || turnViews.size()>turns.length()) {messageActions.clear();messages.removeAllViews(); turnViews.clear(); turnError=null;}
-    chatTitle.setText((turns.length()==0?"新对话":turns.optJSONObject(0).optString("userText","新对话"))+(state.optBoolean("isBranch")?" · 分支":""));
+    chatTitle.setText((!state.optString("title").isEmpty()?state.optString("title"):turns.length()==0?"新对话":turns.optJSONObject(0).optString("userText","新对话"))+(state.optBoolean("isBranch")?" · 分支":""));
     Set<String> ids=new HashSet<>();
     for(int n=0;n<turns.length();n++) {
       JSONObject turn=turns.optJSONObject(n); if(turn==null) continue;
@@ -636,7 +636,9 @@ public final class MainActivity extends Activity {
   static String readableError(String raw) {
     if(raw.isEmpty()) return "";
     try {
-      JSONObject reason=new JSONObject(raw); JSONObject error=reason.optJSONObject("error");
+      JSONObject reason=new JSONObject(raw);
+      if("max-tokens".equals(reason.optString("kind")))return "本轮达到模型输出上限，已保留收到的内容。可发送“继续”或降低思考强度后重试。";
+      JSONObject error=reason.optJSONObject("error");
       String message=error==null?reason.optString("reason",reason.optString("message","")):error.optString("message");
       if(message.isEmpty()) return "本轮未完成，请重试。";
       if(message.contains("tool-call-delta")) return "工具调用数据不完整，请重新发送消息。";

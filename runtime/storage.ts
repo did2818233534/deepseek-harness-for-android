@@ -119,6 +119,12 @@ export class AndroidSessions extends SessionPersistence {
       [Symbol.asyncDispose]: close,
     };
   }
+  setTitle(id, title?: string) {
+    const data = this.load(id);
+    data.titleAttempted = true;
+    if (title) data.title = title;
+    this.save(id, data);
+  }
   setArchived(id, archived: boolean) {
     const data = this.load(id);
     data.archived = archived;

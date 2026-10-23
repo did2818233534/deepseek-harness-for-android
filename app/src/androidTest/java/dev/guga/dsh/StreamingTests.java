@@ -28,12 +28,12 @@ public class StreamingTests {
         out.write((event("content","，这是后续内容。")+"data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: [DONE]\n\n").getBytes(StandardCharsets.UTF_8));out.close();
       } catch(Exception ignored) {}
     },"test-delayed-sse");
-    bridge.api=new OkHttpClient.Builder().addInterceptor(chain -> new Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK").body(new ResponseBody() {
+    bridge.api=new OkHttpClient.Builder().addInterceptor(chain -> {Response titleReply=TitleTestSupport.reply(chain);if(titleReply!=null)return titleReply;return new Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK").body(new ResponseBody() {
       final okio.BufferedSource source=okio.Okio.buffer(okio.Okio.source(in));
       public MediaType contentType(){return MediaType.get("text/event-stream");}
       public long contentLength(){return -1;}
       public okio.BufferedSource source(){return source;}
-    }).build()).build();
+    }).build();}).build();
     try {
       new Settings(c).save("https://api.deepseek.com","test-model","local-test-key",true,32);
       Api.call("/select",new JSONObject()); writer.start(); Api.call("/send",new JSONObject().put("text","流式显示测试"));

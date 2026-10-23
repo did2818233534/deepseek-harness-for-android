@@ -43,7 +43,7 @@ final class MessageActions {
     LinkedHashSet<String> ids=new LinkedHashSet<>();
     for(Map.Entry<String,ChatTurnView> e:host.turnViews.entrySet()) {
       if((e.getValue().user.getVisibility()==View.VISIBLE||e.getValue().attachmentRow.getChildCount()>0))ids.add(e.getKey()+"/u");
-      if(e.getValue().answer.getVisibility()==View.VISIBLE)ids.add(e.getKey()+"/a");
+      if(e.getValue().answer.getVisibility()==View.VISIBLE||e.getValue().outputFiles.getChildCount()>0)ids.add(e.getKey()+"/a");
     }
     return ids;
   }
@@ -69,7 +69,7 @@ final class MessageActions {
     StringBuilder md=new StringBuilder("# ").append(host.chatTitle.getText().toString().replace('\n',' ')).append("\n\n");
     for(Map.Entry<String,ChatTurnView> entry:host.turnViews.entrySet()){
       ChatTurnView v=entry.getValue();if(selected.contains(entry.getKey()+"/u"))md.append("## 用户\n\n").append(v.user.getText()).append(v.attachmentSummary()).append("\n\n");
-      if(selected.contains(entry.getKey()+"/a"))md.append("## 助手\n\n").append(v.markdown.source==null?"":v.markdown.source).append("\n\n");
+      if(selected.contains(entry.getKey()+"/a"))md.append("## 助手\n\n").append(v.markdown.source==null?"":v.markdown.source).append(v.outputSummary()).append("\n\n");
     }
     return md.toString();
   }

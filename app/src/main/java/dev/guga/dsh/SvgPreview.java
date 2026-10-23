@@ -45,7 +45,8 @@ final class SvgPreview {
   static String html(String source) {
     return "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'><meta http-equiv='Content-Security-Policy' content=\"default-src 'none'; style-src 'unsafe-inline'; script-src 'none'\"><style>html,body{margin:0;min-height:100%;background:#fdfbff}body{display:grid;place-items:center;min-height:100vh}svg{max-width:100%;max-height:90vh;width:100%;height:auto}</style></head><body>"+sanitize(source)+"</body></html>";
   }
-  static void open(MainActivity host,String source) {
+  static void open(MainActivity host,String source) {open(host,source,null);}
+  static void open(MainActivity host,String source,String path) {
     LinearLayout page=host.showPage("SVG 预览",new LinearLayout(host));page.removeViewAt(1);
     LinearLayout header=(LinearLayout)page.getChildAt(0);
     TextView title=host.label("SVG 预览",18,UiStyle.INK);title.setPadding(host.dp(12),0,0,0);header.addView(title,new LinearLayout.LayoutParams(0,-2,1));
@@ -55,6 +56,8 @@ final class SvgPreview {
     });copy.setColorFilter(UiStyle.ACCENT);copy.setBackground(host.ui.surface(UiStyle.SURFACE,24));header.addView(copy,new LinearLayout.LayoutParams(host.dp(48),host.dp(48)));
     WebView web=new WebView(host);web.setBackgroundColor(UiStyle.BACKGROUND);
     web.getSettings().setJavaScriptEnabled(false);web.getSettings().setAllowFileAccess(false);web.getSettings().setAllowContentAccess(false);web.getSettings().setBlockNetworkLoads(true);
+    web.getSettings().setSupportZoom(true);web.getSettings().setBuiltInZoomControls(true);web.getSettings().setDisplayZoomControls(false);
+    if(path!=null){header.addView(host.icon(R.drawable.ic_share,"分享图片",v->WorkspaceFiles.actions(host,path,false)),new LinearLayout.LayoutParams(host.dp(48),host.dp(48)));web.setOnLongClickListener(v->{WorkspaceFiles.actions(host,path,false);return true;});}
     web.setWebViewClient(new WebViewClient(){@Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){return true;}});
     page.addView(web,new LinearLayout.LayoutParams(-1,0,1));host.pageCleanup.put(page,()->{web.stopLoading();web.destroy();});
     web.loadDataWithBaseURL("https://svg.invalid/",html(source),"text/html","UTF-8",null);

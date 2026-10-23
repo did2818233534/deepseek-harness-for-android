@@ -38,14 +38,22 @@ export function presentTurns(events: any[], liveFrames: any[], busy: boolean) {
     }
   };
   for (const e of events) {
+    if (e.type === 'user/message' && e.data.source?.kind === 'compact-checkpoint') continue;
     if (e.type === 'user/message') {
       if (turn && processStart) closeProcess(e.time);
       processStart = 0; processTotal = 0;
-      turn = {id: String(e.seq), attachments: e.data.source?.attachments || [], userText: e.data.source?.userText ?? (e.data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n'), text: '', reasoning: '', tools: [], busy: false, startedAt: e.time, endedAt: 0, processActive: false, processElapsedMs: 0};
+      turn = {id: String(e.seq), attachments: e.data.source?.attachments || [], userText: e.data.source?.userText ?? (e.data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n'), text: '', reasoning: '', artifacts: [], tools: [], busy: false, startedAt: e.time, endedAt: 0, processActive: false, processElapsedMs: 0};
       turns.push(turn);
     }
     if (!turn) continue;
-    if (e.type === 'assistant/message') {
+    if (e.type === 'compaction/start') {
+      openProcess(e.time);
+      turn.tools.push({id:'compact-'+e.data.compactionId,name:'compact_context',status:'running',detail:''});
+    } else if (e.type === 'compaction/end') {
+      const item=turn.tools.find(t=>t.id==='compact-'+e.data.compactionId);
+      if(item)item.status=e.data.error?'error':'completed';
+      closeProcess(e.time);
+    } else if (e.type === 'assistant/message') {
       stream(e.data.stream);
       for (const b of e.data.message.content || []) {
         if (b.type === 'text') turn.text += b.text;
@@ -64,6 +72,18 @@ export function presentTurns(events: any[], liveFrames: any[], busy: boolean) {
     } else if (e.type === 'tool/result') {
       const t = turn.tools.find(t => t.id === e.data.message.toolCallId);
       if (t) { t.status = e.data.error?.name === 'AbortError' || /ABORT|CANCEL/i.test(e.data.error?.code || '') ? 'interrupted' : e.data.message.isError ? 'error' : 'completed'; }
+      if (t?.status === 'completed' && ['write_file','create_document','edit_image'].includes(t.name)) {
+        for (const block of e.data.message.content || []) {
+          if (block.type !== 'text') continue;
+          try {
+            const output = JSON.parse(block.text), p = output.path;
+            if (typeof p !== 'string' || !p || p.startsWith('/') || p.includes('\\') || p.split('/').includes('..')) continue;
+            const artifact = {path:p, name:p.split('/').pop(), bytes:output.bytes || 0, revision:String(e.seq)};
+            const previous = turn.artifacts.findIndex(a => a.path === p);
+            if (previous < 0) turn.artifacts.push(artifact); else turn.artifacts[previous] = artifact;
+          } catch {}
+        }
+      }
     } else if (e.type === 'turn/end') {
       closeProcess(e.time);
       turn.endedAt = e.time;

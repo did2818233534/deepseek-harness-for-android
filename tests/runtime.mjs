@@ -12,6 +12,9 @@ fs.mkdirSync(workspace);
 const token = "test-token";
 let modelName = "test-model", reasoningEffort;
 let webEnabled = true, webRequests = [], invalidWeb = false;
+let titleRequests=[], titleMode="ok";
+let largeTool = false;
+let overflowBudget = 0, summaryCalls = 0, summaryMode = "ok";
 let child,
   requests = [],
   toolCalls = [],
@@ -44,7 +47,7 @@ const bridge = http.createServer(async (req, res) => {
   if (req.url === "/tool") {
     toolCalls.push(b);
     await new Promise(r => setTimeout(r, 180));
-    res.end(JSON.stringify({ path: "answer.txt", bytes: 5 }));
+    res.end(JSON.stringify({ path: "answer.txt", bytes: 5, ...(largeTool ? {content:"工具原始结果。".repeat(5000)} : {}) }));
     return;
   }
   if (req.url === "/web-api") {
@@ -53,8 +56,31 @@ const bridge = http.createServer(async (req, res) => {
     return;
   }
   if (req.url === "/model") {
+    if(b.messages?.[0]?.content?.startsWith('为对话生成简短标题')) {
+      titleRequests.push(b);
+      if(titleMode==='fail'){res.statusCode=500;res.end('title unavailable');return;}
+      if(titleMode==='hold'){await new Promise(r=>setTimeout(r,400));}
+      res.end('data: '+JSON.stringify({choices:[{delta:{content:'文件整理与内容分析'},finish_reason:'stop'}]})+'\n\ndata: [DONE]\n\n');return;
+    }
     requests.push(b);
     res.setHeader("content-type", "text/event-stream");
+    if (mode.startsWith('compact')) {
+      const summary = typeof b.messages.at(-1)?.content === 'string' && b.messages.at(-1).content.startsWith('You are now acting as a compaction engine');
+      const emit = (text, usage) => res.end('data: '+JSON.stringify({choices:[{delta:{content:text},finish_reason:'stop'}], ...(usage ? {usage:{prompt_tokens:usage,completion_tokens:10}} : {})})+'\n\ndata: [DONE]\n\n');
+      if (summary) {
+        summaryCalls++;
+        if (summaryMode === 'fail') { res.statusCode=500;res.end('summary unavailable');return; }
+        if (summaryMode === 'hang') { res.write('data: '+JSON.stringify({choices:[{delta:{content:'summary draft'}}]})+'\n\n');return; }
+        emit('## Primary Request and Intent\n- Preserve the user task and continue.');return;
+      }
+      if (overflowBudget > 0) {overflowBudget--;res.statusCode=400;res.end(JSON.stringify({error:{code:'context_length_exceeded',message:'maximum context length exceeded'}}));return;}
+      emit('继续处理完成',mode==='compact-pressure' ? 900000 : undefined);return;
+    }
+    if (mode === 'length' || mode === 'length-tool') {
+      if(mode==='length-tool')res.write('data: '+JSON.stringify({choices:[{delta:{tool_calls:[{index:0,id:'cutoff',function:{name:'write_file',arguments:'{\"path\":'}}]}}]})+'\n\n');
+      res.write('data: '+JSON.stringify({choices:[{delta:{reasoning_content:'实际思考片段'},finish_reason:null}]})+'\n\n');
+      res.end('data: '+JSON.stringify({choices:[{delta:{},finish_reason:'length'}]})+'\n\ndata: [DONE]\n\n');return;
+    }
     if (mode === "streaming") {
       const send = d => res.write("data: " + JSON.stringify({choices:[{delta:d}]}) + "\n\n");
       send({reasoning_content:'先核对'});
@@ -216,6 +242,7 @@ try {
   assert(state.events.some((e) => e.type === "tool/result"));
   assert.equal(state.turns[0].tools[0].name, 'write_file');
   assert.equal(state.turns[0].tools[0].status, 'completed');
+  assert.equal(state.turns[0].artifacts[0].path,'answer.txt','successful generated files become artifacts');
   assert.equal(state.turns[0].tools[0].detail, 'answer.txt');
   assert(state.turns[0].processElapsedMs > 0);
   const id = state.id;
@@ -422,8 +449,99 @@ try {
   }
   const p = fs.readFileSync(path.join(root, "runtime-port"), "utf8");
   assert.equal((await fetch("http://127.0.0.1:" + p + "/state")).status, 401);
+  mode='length';
+  await api('/send',{text:'输出被服务端截断'});
+  await until(async()=>!(await api('/state')).busy);
+  const limited=await api('/state');
+  assert(JSON.parse(limited.lastError).kind==='max-tokens');
+  assert(limited.turns.at(-1).reasoning.includes('实际思考片段'));
+  assert(!('max_tokens' in requests.at(-1)),'client imposes no output ceiling');
+
+  // A partial tool JSON must never execute when the provider ends at its output ceiling.
+  mode='length-tool';const executedBefore=toolCalls.length;
+  await api('/send',{text:'截断的工具参数'});await until(async()=>!(await api('/state')).busy);
+  assert.equal(toolCalls.length,executedBefore);
+  assert.equal(JSON.parse((await api('/state')).lastError).kind,'max-tokens');
+  // Exercise the actual bundled desktop policy, transport, durable replay and UI projection.
+  const settled = () => until(async()=>{const s=await api('/state');return !s.busy?s:null;});
+  const eventsOnDisk = id => JSON.parse(fs.readFileSync(path.join(root,'sessions',id+'.json'),'utf8')).events;
+  modelName='deepseek-flash'; mode='compact-ok';
+  await api('/select');
+  await api('/send',{text:'需要保留的原始任务。'.repeat(3000)}); await settled();
+  overflowBudget=1; const beforeSummary=summaryCalls;
+  await api('/send',{text:'继续完成原始任务'});
+  const recovered=await settled();
+  assert.equal(recovered.lastError,'','context overflow automatically recovered');
+  assert.equal(summaryCalls,beforeSummary+1);
+  assert(eventsOnDisk(recovered.id).some(e=>e.type==='compaction/summary'));
+  assert(requests.at(-1).messages.some(m=>String(m.content).includes('<compacted-summary>')));
+  assert.equal(recovered.turns.length,2,'summary is not a fake user message');
+  assert.equal(recovered.turns[0].userText,'需要保留的原始任务。'.repeat(3000),'visible history stays intact');
+  await stop(); await start();
+  await api('/send',{text:'重新启动后继续'});await settled();
+  assert(requests.at(-1).messages.some(m=>String(m.content).includes('<compacted-summary>')),'compacted request survives restart');
+  assert.equal((await api('/state')).turns.length,3);
+
+  await api('/select');mode='compact-ok';
+  for(let n=0;n<10;n++){if(n===9)mode='compact-pressure';await api('/send',{text:'pressure history '.repeat(5800)});await settled();}
+  mode='compact-ok';const pressureBefore=summaryCalls;
+  await api('/send',{text:'下一轮自动检查上下文'});const pressured=await settled();
+  assert.equal(pressured.lastError,'');
+  assert(summaryCalls>pressureBefore,'pressure compacts proactively without an overflow response');
+
+  await api('/select');mode='compact-ok';
+  await api('/send',{text:'压缩失败时仍保留原文。'.repeat(3000)});await settled();
+  summaryMode='fail';overflowBudget=1;
+  await api('/send',{text:'压缩服务失败'});const failedCompact=await settled();
+  assert(failedCompact.lastError.includes('CONTEXT_WINDOW_EXCEEDED'));
+  assert(!eventsOnDisk(failedCompact.id).some(e=>e.type==='compaction/summary'));
+  summaryMode='ok';
+  await api('/send',{text:'恢复服务后继续'});await settled();
+  assert(requests.at(-1).messages.some(m=>String(m.content).includes('压缩失败时仍保留原文')));
+
+  await api('/select');await api('/send',{text:'取消压缩测试。'.repeat(3000)});await settled();
+  summaryMode='hang';overflowBudget=1;const cancelBefore=summaryCalls;
+  await api('/send',{text:'开始压缩'});await until(()=>summaryCalls>cancelBefore);
+  await api('/cancel');const canceledCompact=await settled();
+  assert(!eventsOnDisk(canceledCompact.id).some(e=>e.type==='compaction/summary'));
+  summaryMode='ok';await api('/send',{text:'取消后继续'});const continued=await settled();
+  assert.equal(continued.lastError,'');
+
+  await api('/select');mode='tool';calls=0;largeTool=true;
+  await api('/send',{text:'先取得较长的工具结果'});await settled();largeTool=false;
+  mode='compact-ok';overflowBudget=1;
+  await api('/send',{text:'继续处理结果'});const pruned=await settled();
+  assert.equal(pruned.lastError,'');
+  assert(eventsOnDisk(pruned.id).some(e=>e.type==='compaction/prune'),'desktop tool-result pruning is connected');
+  assert(eventsOnDisk(pruned.id).some(e=>e.type==='tool/result'&&JSON.stringify(e).includes('工具原始结果。'.repeat(5000))),'durable original tool output is retained');
+
+  await api('/select');mode='compact-ok';
+  await api('/send',{text:'持续超限时不无限重试。'.repeat(3000)});await settled();
+  overflowBudget=5;const retryStart=requests.length;
+  await api('/send',{text:'无法恢复的上下文超限'});const exhausted=await settled();
+  assert(exhausted.lastError.includes('CONTEXT_WINDOW_EXCEEDED'));
+  assert.equal(requests.length-retryStart,3,'one rejected request, one summary, one retry only');
+  overflowBudget=0;
+
+  mode='compact-ok';titleMode='ok';await api('/select');const titlesBefore=titleRequests.length;
+  await api('/send',{text:'请帮我整理这些文档并分析里面的内容'});await settled();
+  const titled=await until(async()=>{const s=await api('/state');return s.title==='文件整理与内容分析'?s:null;});
+  assert.equal(titleRequests.length,titlesBefore+1);
+  assert.equal(titleRequests.at(-1).thinking.type,'disabled');
+  assert(!titleRequests.at(-1).tools,'title generation does not execute tools');
+  assert.equal((await api('/sessions')).sessions.find(s=>s.id===titled.id).title,titled.title);
+  await api('/send',{text:'继续'});await settled();assert.equal(titleRequests.length,titlesBefore+1);
+  await stop();await start();assert.equal((await api('/state')).title,'文件整理与内容分析');
+  titleMode='fail';await api('/select');await api('/send',{text:'标题失败保留这个临时标题'});await settled();
+  await until(()=>titleRequests.length===titlesBefore+2);
+  assert.equal((await api('/state')).lastError,'');
+  assert((await api('/sessions')).sessions.some(s=>s.title==='标题失败保留这个临时标题'));
+  titleMode='hold';await api('/select');await api('/send',{text:'删除时不能复活这个对话'});const deleteTitle=await settled();
+  await api('/session/delete',{id:deleteTitle.id});await new Promise(r=>setTimeout(r,500));
+  assert(!fs.existsSync(path.join(root,'sessions',deleteTitle.id+'.json')));
+
   console.log(
-    "PASS: upstream loop, tool round trip, transcript mapping, durable resume, cancellation, authorization, upstream multi-query search/fetch, malformed response, tool enablement, image transport and durable attachment replay",
+    "PASS: upstream loop, tool round trip, transcript mapping, durable resume, cancellation, authorization, upstream multi-query search/fetch, malformed response, tool enablement, image transport and durable attachment replay; desktop compaction pressure, overflow recovery, restart, failure, cancellation, pruning and bounded recovery",
   );
 } finally {
   await stop();

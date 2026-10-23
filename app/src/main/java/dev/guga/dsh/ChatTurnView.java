@@ -16,7 +16,8 @@ final class ChatTurnView extends LinearLayout {
   boolean expanded, initialized, wasActive;
   String selectionKey="";
   String turnId="", attachmentKey="";
-  final LinearLayout attachmentRow;
+  final LinearLayout attachmentRow, outputFiles;
+  String outputKey="";
   final ChatMarkdown markdown;
 
   ChatTurnView(MainActivity host) {
@@ -50,6 +51,7 @@ final class ChatTurnView extends LinearLayout {
     addView(svgCard,bubbleParams(false));
     svgCard.setOnClickListener(v->{if(host.messageActions.active())host.messageActions.toggle(turnId+"/a");else SvgPreview.open(host,markdown.source==null?"":markdown.source);});
     svgCard.setOnLongClickListener(v->{host.messageActions.toggle(turnId+"/a");return true;});
+    outputFiles=new LinearLayout(host);outputFiles.setOrientation(VERTICAL);outputFiles.setVisibility(GONE);addView(outputFiles,bubbleParams(false));
     ChatMarkdown.links(answer,host);
     user.setOnLongClickListener(v -> {host.messageActions.toggle(turnId+"/u");return true;});
     answer.setOnLongClickListener(v -> {host.messageActions.toggle(turnId+"/a");return true;});
@@ -78,7 +80,7 @@ final class ChatTurnView extends LinearLayout {
       attachmentKey=key;attachmentRow.removeAllViews();
       if(attached!=null)for(int n=0;n<attached.length();n++){
         JSONObject item=attached.optJSONObject(n);if(item==null)continue;
-        attachmentRow.addView(Attachments.card(host,item,null,()->{if(host.messageActions.active())host.messageActions.toggle(turnId+"/u");},()->host.messageActions.toggle(turnId+"/u")));
+        attachmentRow.addView(Attachments.card(host,item,null,()->{if(host.messageActions.active())host.messageActions.toggle(turnId+"/u");else if(item.optString("mime").startsWith("image/"))WorkspaceFiles.preview(host,item.optString("path"));else WorkspaceFiles.open(host,item.optString("path"));},()->host.messageActions.toggle(turnId+"/u")));
       }
     }
     attachmentRow.setVisibility(attachmentRow.getChildCount()>0?VISIBLE:GONE);
@@ -86,6 +88,8 @@ final class ChatTurnView extends LinearLayout {
     String svgSource=turn.optString("text");
     svgCard.setVisibility(SvgPreview.extract(svgSource).isEmpty()||SvgPreview.standalone(svgSource)?GONE:VISIBLE);
     if(SvgPreview.standalone(svgSource))answer.setText("SVG 图形 · 点击预览");
+    JSONArray generated=ArtifactViews.collect(turn);String generatedKey=generated.toString();
+    if(!generatedKey.equals(outputKey)){outputKey=generatedKey;ArtifactViews.fill(this,generated);}
     String thought=turn.optString("reasoning"); JSONArray tools=turn.optJSONArray("tools");
     boolean hasTools=tools!=null&&tools.length()>0, hasProcess=!thought.isEmpty()||hasTools;
     boolean active=turn.optBoolean("processActive")&&turn.optBoolean("busy");
@@ -139,8 +143,17 @@ final class ChatTurnView extends LinearLayout {
     long seconds=Math.max(1,(millis+999)/1000);
     return seconds<60?seconds+" 秒":seconds/60+" 分 "+seconds%60+" 秒";
   }
+  String outputSummary() {
+    StringBuilder text=new StringBuilder();
+    try {JSONArray files=new JSONArray(outputKey.isEmpty()?"[]":outputKey);
+      for(int n=0;n<files.length();n++){JSONObject f=files.getJSONObject(n);String path=f.optString("path");
+        if(WorkspaceFiles.linkPath(path)!=null)text.append("\n\n[").append(f.optString("name",path).replace("[","\\[").replace("]","\\]")).append("](").append(android.net.Uri.encode(path,"/")).append(")");
+      }
+    }catch(Exception ignored){}return text.toString();
+  }
   static String toolLabel(String name) {
     switch(name) {
+      case "compact_context": return "整理上下文";
       case "web_search": return "搜索网页";
       case "web_fetch": return "读取网页";
       case "list_files": return "查看文件列表";

@@ -153,7 +153,7 @@ final class FileTools {
     } else {
       if (
         !name.matches(
-          ".*\\.(txt|md|csv|tsv|json|html|htm|xml|log|yaml|yml|java|js|ts|py|css)$"
+          ".*\\.(txt|md|csv|tsv|json|html|htm|xml|log|yaml|yml|java|js|ts|py|css|svg)$"
         )
       ) throw new IOException(
         "本版支持文本、CSV、DOCX 和文字 PDF；不支持 XLSX、旧版 DOC 或二进制文件"
@@ -194,7 +194,7 @@ final class FileTools {
       } else {
         if (
           !lower.matches(
-            ".*\\.(txt|md|csv|tsv|json|html|htm|xml|log|yaml|yml|java|js|ts|py|css)$"
+            ".*\\.(txt|md|csv|tsv|json|html|htm|xml|log|yaml|yml|java|js|ts|py|css|svg)$"
           )
         ) throw new IOException(
           "请使用文本类扩展名；DOCX/PDF 请调用 create_document"
@@ -216,7 +216,7 @@ final class FileTools {
     return new JSONObject()
       .put("path", a.getString("path"))
       .put("bytes", f.length())
-      .put("status", "已生成，可在文件面板导出");
+      .put("status", "已生成，可点击对话中的文件链接打开、分享或保存");
   }
 
   private static String esc(String s) {

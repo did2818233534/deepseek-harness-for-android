@@ -99,6 +99,7 @@ final class ChatMarkdown {
           int offset=layout.getOffsetForHorizontal(line,px);
           URLSpan[] spans=((Spanned)view.getText()).getSpans(offset,offset,URLSpan.class);
           if(spans.length>0) {
+            if(WorkspaceFiles.openLink(host,spans[0].getURL()))return true;
             Uri uri=Uri.parse(spans[0].getURL());String scheme=uri.getScheme();
             if("https".equalsIgnoreCase(scheme)||"http".equalsIgnoreCase(scheme)) {
               try {host.startActivity(new Intent(Intent.ACTION_VIEW,uri));}

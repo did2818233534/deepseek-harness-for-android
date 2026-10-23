@@ -1,6 +1,6 @@
 import { attachmentImage } from "./attachments.ts";
 import { StringDecoder } from "node:string_decoder";
-import { LlmAdapter, ToolCallId } from "@deepseek-ai/dsh-llm";
+import { LlmAdapter, ToolCallId, HarnessError, isContextWindowExceededError } from "@deepseek-ai/dsh-llm";
 /** Translates the upstream canonical transcript to a Chat Completions transport owned by Android. */
 export class AndroidAdapter extends LlmAdapter {
   constructor(
@@ -11,7 +11,14 @@ export class AndroidAdapter extends LlmAdapter {
     super();
   }
   async resolveModel(provider, model) {
-    return { provider, id: model, name: model };
+    // Same context capacity as the pinned desktop DeepSeek adapter. Unknown
+    // model IDs do not inherit an unverified capacity; overflow recovery remains available.
+    const known = /^(deepseek-flash|deepseek-v4(?:\.1)?-(?:flash|pro)|deepseek-pro)$/i.test(model);
+    const effort = this.settings().reasoningEffort;
+    return { provider, id: model, name: model,
+      ...(known ? {context: {contextWindow: 1_000_000}} : {}),
+      defaultMaxTokens: effort === "none" ? 8192 : effort === "max" ? 131072 : 65536,
+    };
   }
   async *stream(options) {
     const omitImages = /^(deepseek-v4-pro|deepseek-pro|deepseek-reasoner|deepseek-chat)$/i.test(options.model);
@@ -46,19 +53,25 @@ export class AndroidAdapter extends LlmAdapter {
       model: options.model,
       messages,
       stream: true,
-      max_tokens: options.maxTokens ?? 8192,
     };
     if (options.tools?.length)
       body.tools = options.tools.map((t) => ({
         type: "function",
         function: t,
       }));
-    const configuredEffort = this.settings().reasoningEffort;
+    const configuredEffort = options.purpose === "session-title" ? "none" : this.settings().reasoningEffort;
     const effort = ["none", "low", "high", "max"].includes(configuredEffort) ? configuredEffort : "high";
     body.thinking = {type: effort === "none" ? "disabled" : "enabled"};
     if (effort !== "none") body.reasoning_effort = effort;
     if (Buffer.byteLength(JSON.stringify(body), "utf8") > 48 * 1024 * 1024) throw Error("当前对话的图片总量过大，请新建对话或减少图片后重试");
-    const response = await this.bridge("/model", body, options.signal, true);
+    let response;
+    try {
+      response = await this.bridge("/model", body, options.signal, true);
+    } catch (error) {
+      if (isContextWindowExceededError(error instanceof Error ? error.message : String(error)))
+        throw new HarnessError("模型上下文已满", "CONTEXT_WINDOW_EXCEEDED", {cause:error});
+      throw error;
+    }
     if (!response.body) throw Error("Model returned no stream");
     const decoder = new StringDecoder("utf8");
     let pending = "",
@@ -89,7 +102,11 @@ export class AndroidAdapter extends LlmAdapter {
         }
         if (!data) continue;
         const chunk = JSON.parse(data);
-        if (chunk.error) throw Error(chunk.error.message || "Model error");
+        if (chunk.error) {
+          const detail = JSON.stringify(chunk.error);
+          if (isContextWindowExceededError(detail)) throw new HarnessError("模型上下文已满", "CONTEXT_WINDOW_EXCEEDED");
+          throw Error(chunk.error.message || "Model error");
+        }
         if (chunk.usage) usage = chunk.usage;
         const c = chunk.choices?.[0];
         if (!c) continue;
@@ -143,6 +160,7 @@ export class AndroidAdapter extends LlmAdapter {
     if (started.has(1))
       yield { type: "block-end", index: 1, block: { type: "text", text } };
     for (const [index, c] of calls) {
+      if (finish === "length") continue; // Never execute truncated tool arguments.
       if (!c.id || !c.name) throw Error("Incomplete tool call");
       JSON.parse(c.arguments);
       yield {

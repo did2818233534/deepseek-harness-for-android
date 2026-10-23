@@ -389,8 +389,9 @@ public class DeviceTests {
         Thread.sleep(100);
       }
     }
-    HarnessService service = HarnessService.instance;
-    NativeBridge bridge = service.bridge;
+    // The idle service may detach after /state; the process core and bridge remain alive.
+    NativeBridge bridge = HarnessService.retainedBridge;
+    assertNotNull(bridge);
     // Intercept only in-process instrumentation; never sends a test key to a remote endpoint.
     OkHttpClient original = bridge.api;
     AtomicInteger requests = new AtomicInteger();
@@ -399,6 +400,7 @@ public class DeviceTests {
     String output = "device-test-" + System.nanoTime() + ".txt";
     bridge.api = new OkHttpClient.Builder()
       .addInterceptor(chain -> {
+        Response titleReply=TitleTestSupport.reply(chain);if(titleReply!=null)return titleReply;
         try {
           int n = requests.getAndIncrement();
           okio.Buffer requestBody = new okio.Buffer();
@@ -542,6 +544,7 @@ public class DeviceTests {
       ) found = true;
       assertTrue("tool result event", found);
       bridge.api = new OkHttpClient.Builder().addInterceptor(chain -> {
+        Response titleReply=TitleTestSupport.reply(chain);if(titleReply!=null)return titleReply;
         String url = chain.request().url().toString();
         if (!url.equals("https://api.deepseek.com/v1/tools/search") && !url.equals("https://api.deepseek.com/v1/tools/fetch")) throw new IOException("unexpected endpoint");
         return new okhttp3.Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(200).message("OK")

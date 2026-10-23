@@ -23,7 +23,11 @@
     "packages/web/web",
     "packages/web/tool-web",
     "packages/web/web-deepseek-api",
-    "packages/guard/timeout-policy"
+    "packages/guard/timeout-policy",
+    "packages/compaction/compaction",
+    "packages/compaction/compaction-basic",
+    "packages/compaction/compaction-tool-result-pruner",
+    "packages/llm/token-meter"
   ],
   "modifications": "Source unchanged. Build-time Unicode regex expansion, bundled version substitution, and web-deepseek-api transport redirected to runtime/web-transport.ts (Android HTTPS and Keystore seam)."
 }
