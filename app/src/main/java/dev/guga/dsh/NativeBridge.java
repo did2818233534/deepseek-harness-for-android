@@ -13,6 +13,7 @@ final class NativeBridge extends NanoHTTPD {
 
   volatile HarnessService service;
   final Settings settings;
+  final android.content.Context appContext;
   final FileTools files;
   final String token;
   OkHttpClient api = new OkHttpClient.Builder()
@@ -45,7 +46,7 @@ final class NativeBridge extends NanoHTTPD {
 
   NativeBridge(HarnessService s, String token) throws Exception {
     super("127.0.0.1", 0);
-    service = s;
+    service = s;appContext=s.getApplicationContext();
     settings = new Settings(s.getApplicationContext());
     files = new FileTools(s.getApplicationContext());
     this.token = token;
@@ -86,6 +87,12 @@ final class NativeBridge extends NanoHTTPD {
       session.parseBody(body);
       JSONObject input = new JSONObject(body.getOrDefault("postData", "{}"));
       switch (session.getUri()) {
+        case "/model-switch":
+          boolean restored=input.optBoolean("restored");
+          String selected=restored?settings.model():input.optString("model");
+          String notice=(restored?"已恢复 ":"本次图片回复临时使用 ")+("deepseek-flash".equals(selected)?"DeepSeek Flash":"deepseek-v4-pro".equals(selected)?"DeepSeek V4 Pro":selected);
+          new android.os.Handler(android.os.Looper.getMainLooper()).post(()->android.widget.Toast.makeText(appContext,notice,android.widget.Toast.LENGTH_SHORT).show());
+          return ok(new JSONObject().put("ok",true));
         case "/settings":
           return ok(settings.publicData());
         case "/status":

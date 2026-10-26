@@ -25,7 +25,7 @@ final class ModelSettingsPanel {
   Button modelButton;
   ImageButton refresh;
   TextView state;
-  Switch search, fetch;
+  Switch search, fetch, autoImageModel;
   String effort;
   static final String[] EFFORTS = {"none", "low", "high", "max"};
   static final String[] EFFORT_LABELS = {"关闭", "低", "高", "最高"};
@@ -78,6 +78,7 @@ final class ModelSettingsPanel {
     search = toggle("联网搜索", settings.webSearch());
     if (!quick) {
       fetch = toggle("网页读取", settings.webFetch());
+      autoImageModel = toggle("图片自动切换模型", settings.autoImageModel());
       steps = a.field(box, "每轮最多步骤", String.valueOf(values.optInt("maxSteps", 32)), false);
       steps.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
 
@@ -167,6 +168,7 @@ final class ModelSettingsPanel {
         !effort.equals("none"), count);
       settings.saveReasoningEffort(effort);
       settings.saveWeb(search.isChecked(), quick ? settings.webFetch() : fetch.isChecked());
+      if(!quick)settings.saveAutoImageModel(autoImageModel.isChecked());
       a.status.setText(selected);
       return true;
     } catch (Exception e) { setState(e instanceof NumberFormatException ? "请输入有效的步骤数" : e.getMessage()); return false; }

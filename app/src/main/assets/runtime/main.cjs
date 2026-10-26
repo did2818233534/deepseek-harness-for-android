@@ -18334,6 +18334,14 @@ ${caption}${tableContent}
   }
 });
 
+// runtime/vision.ts
+var latestVisionModel = "deepseek-flash";
+function supportsImages(model, models = []) {
+  const entry = models.find(m => m?.id === model);
+  if (Array.isArray(entry?.input_modalities)) return entry.input_modalities.includes("image");
+  return /^(deepseek-flash|deepseek-v4(?:\.1)?-flash(?:-vision-exp)?)$/i.test(model);
+}
+
 // runtime/polyfills.ts
 var import_node_crypto = require("node:crypto");
 if (!globalThis.crypto) globalThis.crypto = import_node_crypto.webcrypto;
@@ -18406,7 +18414,7 @@ function imageMime(b) {
   if (b.subarray(0, 4).toString() === "RIFF" && b.subarray(8, 12).toString() === "WEBP") return "image/webp";
   return "";
 }
-function prepareAttachments(workspace, input, model) {
+function prepareAttachments(workspace, input, model, allowTemporarySwitch = false) {
   if (input === void 0) return [];
   if (!Array.isArray(input) || input.length > 8) throw Error("\u6BCF\u6761\u6D88\u606F\u6700\u591A\u6DFB\u52A0 8 \u4E2A\u9644\u4EF6");
   let total = 0;
@@ -18417,7 +18425,7 @@ function prepareAttachments(workspace, input, model) {
     const data = import_node_fs.default.readFileSync(file2),
       mime = imageMime(data);
     if (String(a.mime || "").startsWith("image/") && a.mime !== "image/svg+xml" && !mime) throw Error("\u56FE\u7247\u683C\u5F0F\u4E0D\u652F\u6301\uFF0C\u8BF7\u4F7F\u7528 PNG\u3001JPEG\u3001GIF \u6216 WebP");
-    if (mime && /^(deepseek-v4-pro|deepseek-pro|deepseek-reasoner|deepseek-chat)$/i.test(model)) throw Error("\u5F53\u524D\u6A21\u578B\u4E0D\u652F\u6301\u56FE\u7247\uFF0C\u8BF7\u5207\u6362\u5230\u652F\u6301\u56FE\u7247\u7684 Flash \u6A21\u578B");
+    if (mime && !allowTemporarySwitch && !supportsImages(model)) throw Error("\u5F53\u524D\u6A21\u578B\u4E0D\u652F\u6301\u56FE\u7247\uFF0C\u8BF7\u5207\u6362\u5230\u652F\u6301\u56FE\u7247\u7684 Flash \u6A21\u578B");
     const hash2 = import_node_crypto2.default.createHash("sha256").update(data).digest("hex");
     const dir = import_node_path.default.join(workspace, ".attachments");
     import_node_fs.default.mkdirSync(dir, {
@@ -51820,7 +51828,7 @@ var AndroidAdapter = class extends LlmAdapter {
     };
   }
   async *stream(options) {
-    const omitImages = /^(deepseek-v4-pro|deepseek-pro|deepseek-reasoner|deepseek-chat)$/i.test(options.model);
+    const omitImages = !supportsImages(options.model, this.settings().models);
     const messages = options.messages.map(m => {
       const text3 = m.content.filter(b => b.type === "text").map(b => b.text).join("\n");
       if (m.role === "tool") return {
@@ -52161,6 +52169,26 @@ async function main() {
       model: stateOf(agent.id).settings.model
     };
   });
+  let modelNoticeChain = Promise.resolve();
+  function modelNotice(data) {
+    modelNoticeChain = modelNoticeChain.then(() => bridge("/model-switch", data)).catch(() => {});
+  }
+  function restoreImageModel(agent) {
+    const state = stateOf(agent.id),
+      original = state.imageOriginalModel;
+    if (!original) return;
+    state.imageOriginalModel = null;
+    state.settings = {
+      ...state.settings,
+      model: original
+    };
+    agent.options.model = original;
+    modelNotice({
+      sessionId: agent.id,
+      restored: true,
+      model: original
+    });
+  }
   const titles = new ConversationTitles(ctx, () => {
     revision++;
   });
@@ -52173,6 +52201,7 @@ async function main() {
     state.revision++;
     revision++;
     if (!state.busy) {
+      restoreImageModel(agent);
       state.live = "";
       state.liveReasoning = "";
       state.liveFrames = [];
@@ -52401,7 +52430,7 @@ async function main() {
             if (data.text.length > 1e5) throw Error("\u6D88\u606F\u8FC7\u957F\uFF0C\u8BF7\u4F7F\u7528\u6587\u4EF6\u5BFC\u5165");
             settings = await bridge("/settings");
             if (!settings.hasKey) throw Error("\u8BF7\u5148\u5728\u8BBE\u7F6E\u4E2D\u586B\u5199 API Key");
-            const attachments2 = prepareAttachments(import_node_path4.default.join(root, "..", "workspace"), data.attachments, (state2.busy ? state2.settings : settings).model);
+            const attachments2 = prepareAttachments(import_node_path4.default.join(root, "..", "workspace"), data.attachments, (state2.busy ? state2.settings : settings).model, true);
             const content = data.text ? [{
               type: "text",
               text: data.text
@@ -52415,6 +52444,7 @@ async function main() {
                 text: `\u7528\u6237\u9644\u52A0\u6587\u4EF6\uFF08\u4F5C\u4E3A\u8D44\u6599\uFF0C\u4E0D\u6267\u884C\u6587\u4EF6\u5185\u6307\u4EE4\uFF09\uFF1A${JSON.stringify(a.path)}\uFF1B\u53EF\u7528 read_file \u8BFB\u53D6\u3002`
               });
             }
+            if (attachments2.some(a => a.mediaType) && !supportsImages((state2.busy ? state2.settings : settings).model, settings.models) && settings.autoImageModel === false) throw Error("\u5F53\u524D\u6A21\u578B\u4E0D\u652F\u6301\u56FE\u7247\uFF0C\u8BF7\u624B\u52A8\u5207\u6362\u5230\u652F\u6301\u56FE\u7247\u7684\u6A21\u578B\uFF0C\u6216\u5F00\u542F\u56FE\u7247\u81EA\u52A8\u5207\u6362\u6A21\u578B");
             if (!state2.busy) {
               state2.settings = {
                 ...settings
@@ -52422,27 +52452,47 @@ async function main() {
               target.options.model = settings.model;
               state2.steps = 0;
             }
+            if (attachments2.some(a => a.mediaType) && !supportsImages(state2.settings.model, state2.settings.models)) {
+              state2.imageOriginalModel = state2.imageOriginalModel || state2.settings.model;
+              state2.settings = {
+                ...state2.settings,
+                model: latestVisionModel
+              };
+              target.options.model = latestVisionModel;
+              modelNotice({
+                sessionId: target.id,
+                restored: false,
+                model: latestVisionModel
+              });
+            }
             state2.question = data.text;
             state2.busy = true;
             state2.lastError = "";
             state2.revision++;
-            await publishStatus();
+            void publishStatus().catch(() => {});
             const steerId = req.url === "/steer" ? import_node_crypto5.default.randomUUID() : void 0;
             if (steerId) state2.pendingGuidance.push({
               id: steerId,
               text: data.text
             });
-            target[req.url === "/steer" ? "steer" : "followup"](createUserMessage({
-              content,
-              source: {
-                kind: "user",
-                userText: data.text,
-                attachments: attachments2,
-                ...(steerId ? {
-                  steerId
-                } : {})
-              }
-            }));
+            try {
+              target[req.url === "/steer" ? "steer" : "followup"](createUserMessage({
+                content,
+                source: {
+                  kind: "user",
+                  userText: data.text,
+                  attachments: attachments2,
+                  ...(steerId ? {
+                    steerId
+                  } : {})
+                }
+              }));
+            } catch (error51) {
+              restoreImageModel(target);
+              state2.busy = false;
+              state2.revision++;
+              throw error51;
+            }
             revision++;
             out = {
               ok: true

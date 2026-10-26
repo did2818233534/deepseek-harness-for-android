@@ -1,3 +1,4 @@
+import { supportsImages } from "./vision.ts";
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -16,7 +17,7 @@ function imageMime(b: Buffer) {
   if (b.subarray(0,4).toString() === 'RIFF' && b.subarray(8,12).toString() === 'WEBP') return 'image/webp';
   return '';
 }
-export function prepareAttachments(workspace: string, input: any, model: string) {
+export function prepareAttachments(workspace: string, input: any, model: string, allowTemporarySwitch = false) {
   if (input === undefined) return [];
   if (!Array.isArray(input) || input.length > 8) throw Error('每条消息最多添加 8 个附件');
   let total = 0;
@@ -26,7 +27,7 @@ export function prepareAttachments(workspace: string, input: any, model: string)
     if (bytes > 16 * 1024 * 1024 || (total += bytes) > 32 * 1024 * 1024) throw Error('附件过大：单个最多 16 MB，总计最多 32 MB');
     const data = fs.readFileSync(file), mime = imageMime(data);
     if (String(a.mime || '').startsWith('image/') && a.mime !== 'image/svg+xml' && !mime) throw Error('图片格式不支持，请使用 PNG、JPEG、GIF 或 WebP');
-    if (mime && /^(deepseek-v4-pro|deepseek-pro|deepseek-reasoner|deepseek-chat)$/i.test(model)) throw Error('当前模型不支持图片，请切换到支持图片的 Flash 模型');
+    if (mime && !allowTemporarySwitch && !supportsImages(model)) throw Error('当前模型不支持图片，请切换到支持图片的 Flash 模型');
     const hash = crypto.createHash('sha256').update(data).digest('hex');
     // Immutable copies preserve prior turns when a working file is edited later.
     const dir = path.join(workspace, '.attachments');

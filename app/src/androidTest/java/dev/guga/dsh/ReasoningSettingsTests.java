@@ -12,7 +12,7 @@ public class ReasoningSettingsTests {
     assertEquals(48L*1024*1024, NativeBridge.requestLimit("/model"));
     for(String route:new String[]{"/tool","/settings","/web-api","/model/"}) assertEquals(3L*1024*1024, NativeBridge.requestLimit(route));
   }
-  @Test public void defaultHighAndEveryEffortSurviveSettingsRecreation() throws Exception {
+  @Test public void defaultMaxAndEveryEffortSurviveSettingsRecreation() throws Exception {
     Context base = InstrumentationRegistry.getInstrumentation().getTargetContext();
     String name = "reasoning-test-" + java.util.UUID.randomUUID();
     Context isolated = new ContextWrapper(base) {
@@ -22,7 +22,13 @@ public class ReasoningSettingsTests {
     };
     try {
       Settings settings = new Settings(isolated);
-      assertEquals("high", settings.reasoningEffort());
+      assertEquals("max", settings.reasoningEffort());
+      assertEquals("deepseek-v4-pro", settings.model());
+      assertEquals("https://api.deepseek.com", settings.base());
+      assertTrue(settings.webSearch());assertTrue(settings.webFetch());
+      assertTrue(settings.autoImageModel());settings.saveAutoImageModel(false);assertFalse(new Settings(isolated).autoImageModel());settings.saveAutoImageModel(true);assertTrue(new Settings(isolated).autoImageModel());
+      assertEquals(32,settings.publicData().getInt("maxSteps"));
+      assertEquals("",settings.apiKey());assertFalse(settings.publicData().getBoolean("hasKey"));
       for (String effort : new String[]{"low", "max", "none", "high", "none", "high"}) {
         settings.saveReasoningEffort(effort);
         Settings reopened = new Settings(isolated);

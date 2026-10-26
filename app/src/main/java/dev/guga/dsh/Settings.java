@@ -15,8 +15,10 @@ import org.json.JSONObject;
 final class Settings {
 
   private final SharedPreferences prefs;
+  private final android.content.res.Resources defaults;
 
   Settings(Context c) {
+    defaults = c.getResources();
     prefs = c.getSharedPreferences("settings", Context.MODE_PRIVATE);
   }
 
@@ -92,16 +94,16 @@ final class Settings {
   }
 
   String base() {
-    return "https://api.deepseek.com";
+    return defaults.getString(R.string.default_api_base);
   }
 
   String model() {
-    return prefs.getString("model", "deepseek-v4-pro");
+    return prefs.getString("model", defaults.getString(R.string.default_model));
   }
 
   String reasoningEffort() {
-    String value = prefs.getString("reasoningEffort", "high");
-    return ("none".equals(value) || "low".equals(value) || "high".equals(value) || "max".equals(value)) ? value : "high";
+    String value = prefs.getString("reasoningEffort", defaults.getString(R.string.default_reasoning_effort));
+    return ("none".equals(value) || "low".equals(value) || "high".equals(value) || "max".equals(value)) ? value : defaults.getString(R.string.default_reasoning_effort);
   }
 
   void saveReasoningEffort(String value) throws Exception {
@@ -109,19 +111,27 @@ final class Settings {
     if (!prefs.edit().putString("reasoningEffort", value).commit()) throw new Exception("设置保存失败");
   }
 
-  boolean webSearch() { return prefs.getBoolean("webSearch", true); }
-  boolean webFetch() { return prefs.getBoolean("webFetch", true); }
+  boolean autoImageModel(){return prefs.getBoolean("autoImageModel",defaults.getBoolean(R.bool.default_auto_image_model));}
+  void saveAutoImageModel(boolean enabled)throws Exception{if(!prefs.edit().putBoolean("autoImageModel",enabled).commit())throw new Exception("设置保存失败");}
+  boolean webSearch() { return prefs.getBoolean("webSearch", defaults.getBoolean(R.bool.default_web_search)); }
+  boolean webFetch() { return prefs.getBoolean("webFetch", defaults.getBoolean(R.bool.default_web_fetch)); }
   void saveWeb(boolean search, boolean fetch) throws Exception {
     if (!prefs.edit().putBoolean("webSearch", search).putBoolean("webFetch", fetch).commit()) throw new Exception("设置保存失败");
   }
 
+  org.json.JSONArray modelCapabilities(){
+    org.json.JSONArray out=new org.json.JSONArray();
+    try {org.json.JSONArray rows=new JSONObject(prefs.getString("modelCatalog","{}")).optJSONArray("data");
+      if(rows!=null)for(int n=0;n<rows.length();n++){JSONObject row=rows.optJSONObject(n);if(row!=null)out.put(new JSONObject().put("id",row.optString("id")).put("input_modalities",row.optJSONArray("input_modalities")));}
+    }catch(Exception ignored){}return out;
+  }
   JSONObject publicData() throws Exception {
     return new JSONObject()
       .put("base", base()).put("webSearch", webSearch()).put("webFetch", webFetch())
-      .put("model", model())
+      .put("model", model()).put("models",modelCapabilities()).put("autoImageModel",autoImageModel())
       .put("hasKey", !apiKey().isEmpty())
       .put("thinking", !"none".equals(reasoningEffort()))
       .put("reasoningEffort", reasoningEffort())
-      .put("maxSteps", prefs.getInt("steps", 32));
+      .put("maxSteps", prefs.getInt("steps", defaults.getInteger(R.integer.default_max_steps)));
   }
 }

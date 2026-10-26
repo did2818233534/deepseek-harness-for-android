@@ -1,3 +1,4 @@
+import { supportsImages } from "./vision.ts";
 import { attachmentImage } from "./attachments.ts";
 import { StringDecoder } from "node:string_decoder";
 import { LlmAdapter, ToolCallId, HarnessError, isContextWindowExceededError } from "@deepseek-ai/dsh-llm";
@@ -21,7 +22,7 @@ export class AndroidAdapter extends LlmAdapter {
     };
   }
   async *stream(options) {
-    const omitImages = /^(deepseek-v4-pro|deepseek-pro|deepseek-reasoner|deepseek-chat)$/i.test(options.model);
+    const omitImages = !supportsImages(options.model, this.settings().models);
     const messages = options.messages.map((m) => {
       const text = m.content
         .filter((b) => b.type === "text")

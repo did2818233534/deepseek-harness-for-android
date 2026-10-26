@@ -10,7 +10,8 @@ fs.mkdirSync(root);
 const workspace = path.join(testHome, "workspace");
 fs.mkdirSync(workspace);
 const token = "test-token";
-let modelName = "test-model", reasoningEffort;
+let modelName = "test-model", reasoningEffort, autoImageModel=true;
+const modelNotices=[];
 let webEnabled = true, webRequests = [], invalidWeb = false;
 let titleRequests=[], titleMode="ok";
 let largeTool = false;
@@ -28,10 +29,11 @@ const bridge = http.createServer(async (req, res) => {
   for await (const b of req) raw += b;
   const b = JSON.parse(raw);
   res.setHeader("content-type", "application/json");
+  if(req.url === "/model-switch"){modelNotices.push(b);res.end("{}");return;}
   if (req.url === "/settings") {
     res.end(
       JSON.stringify({
-        model: modelName,
+        model: modelName, autoImageModel,
         hasKey: true,
         maxSteps: 32,
         thinking: false,
@@ -410,6 +412,7 @@ try {
     assert.equal(outbound.reasoning_effort, effort === 'none' ? undefined : effort || 'high');
   }
   assert(requests.at(-1).messages.some(m => m.role === 'system' && m.content.includes('SMIL') && m.content.includes('SVG')), 'animation instruction reaches model');
+  modelName='deepseek-flash';
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64');
   fs.writeFileSync(path.join(workspace,'图片.png'), png);
   fs.writeFileSync(path.join(workspace,'备注.txt'), '中文附件');
@@ -436,7 +439,24 @@ try {
   const attachmentPort = fs.readFileSync(path.join(root,'runtime-port'),'utf8');
   modelName = 'deepseek-v4-pro';
   const unsupported = await fetch('http://127.0.0.1:'+attachmentPort+'/send', {method:'POST',headers:{authorization:'Bearer '+token},body:JSON.stringify({text:'look',attachments:[attachments[0]]})});
-  assert.equal(unsupported.status,400,'known text-only models reject images explicitly');
+  assert.equal(unsupported.status,200,'text-only models temporarily switch for new images');
+  await until(async()=>!(await api("/state")).busy);await until(()=>modelNotices.at(-1)?.restored);
+  assert.equal(requests.at(-1).model,'deepseek-flash');
+  assert.equal((await api('/state')).model,'deepseek-v4-pro');
+  assert.equal(modelNotices.at(-2).restored,false);assert.equal(modelNotices.at(-1).model,'deepseek-v4-pro');
+  assert(requests.at(-1).messages.some(m=>Array.isArray(m.content)&&m.content.some(b=>b.type==='image_url')));
+  mode='hang';await api('/send',{text:'cancel temporary image',attachments:[attachments[0]]});
+  await until(async()=>(await api('/state')).busy);assert.equal((await api('/state')).model,'deepseek-flash');
+  const temporarySession=(await api('/state')).id;
+  await api('/select');mode='text';await api('/send',{text:'other concurrent conversation'});await until(async()=>!(await api('/state')).busy);assert.equal(requests.at(-1).model,'deepseek-v4-pro');
+  await api('/select',{id:temporarySession});assert.equal((await api('/state')).model,'deepseek-flash');
+  await api('/cancel');await until(async()=>!(await api("/state")).busy);assert.equal((await api('/state')).model,'deepseek-v4-pro');
+  mode='fail-stream';await api('/send',{text:'failed temporary image',attachments:[attachments[0]]});await until(async()=>!(await api("/state")).busy);assert.equal((await api('/state')).model,'deepseek-v4-pro');
+  mode='text';
+  autoImageModel=false;
+  const disabledSwitch=await fetch('http://127.0.0.1:'+attachmentPort+'/send',{method:'POST',headers:{authorization:'Bearer '+token},body:JSON.stringify({text:'off',attachments:[attachments[0]]})});
+  assert.equal(disabledSwitch.status,400);assert((await disabledSwitch.json()).error.includes('图片自动切换模型'));
+  autoImageModel=true;
   const requestsBeforeModelSwitch = requests.length;
   await api('/send', {text:'切换模型后继续分析之前图片'});
   await until(async () => !(await api('/state')).busy);
