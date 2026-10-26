@@ -13,13 +13,13 @@ public class AttachmentTests {
     var i=InstrumentationRegistry.getInstrumentation();var c=i.getTargetContext();
     dev.guga.updates.UpdateTestDriver.prefs(c).edit().putString("checkedDay",dev.guga.updates.UpdateTestDriver.today()).commit();
     MainActivity a=(MainActivity)i.startActivitySync(new android.content.Intent(c,MainActivity.class).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
-    android.content.IntentFilter imageFilter=new android.content.IntentFilter(android.os.Build.VERSION.SDK_INT>=33?android.provider.MediaStore.ACTION_PICK_IMAGES:android.content.Intent.ACTION_PICK);imageFilter.addDataType("image/*");
+    android.content.IntentFilter imageFilter=new android.content.IntentFilter(android.content.Intent.ACTION_PICK);imageFilter.addDataType("image/*");imageFilter.addDataScheme("content");
     android.content.IntentFilter fileFilter=new android.content.IntentFilter(android.content.Intent.ACTION_OPEN_DOCUMENT);fileFilter.addCategory(android.content.Intent.CATEGORY_OPENABLE);fileFilter.addDataType("*/*");
     var photo=new android.app.Instrumentation.ActivityMonitor(imageFilter,new android.app.Instrumentation.ActivityResult(0,null),true);
     var file=new android.app.Instrumentation.ActivityMonitor(fileFilter,new android.app.Instrumentation.ActivityResult(0,null),true);
     i.addMonitor(photo);i.addMonitor(file);
     try {
-      i.runOnMainSync(()->{a.visible=false;assertEquals("image/*",a.imagePickerIntent().getType());a.importImage();a.importFile();a.importImage();a.importFile();});
+      i.runOnMainSync(()->{a.visible=false;assertEquals("image/*",a.imagePickerIntent().getType());assertEquals(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,a.imagePickerIntent().getData());a.importImage();a.importFile();a.importImage();a.importFile();});
       assertEquals(2,photo.getHits());assertEquals(2,file.getHits());
       i.runOnMainSync(()->{a.attachmentMenu();assertTrue(DeviceTests.containsText(a.dialogs.peek().getWindow().getDecorView(),"图片"));assertTrue(DeviceTests.containsText(a.dialogs.peek().getWindow().getDecorView(),"文件"));a.onBackPressed();assertSame(a.chatRoot,a.currentPage);});
     } finally {i.removeMonitor(photo);i.removeMonitor(file);i.runOnMainSync(a::finish);}

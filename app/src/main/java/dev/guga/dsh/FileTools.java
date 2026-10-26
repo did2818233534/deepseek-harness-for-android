@@ -9,7 +9,7 @@ import com.tom_roush.pdfbox.text.PDFTextStripper;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
+
 import java.util.*;
 import java.util.zip.*;
 import org.json.JSONArray;
@@ -38,6 +38,13 @@ final class FileTools {
     return f;
   }
 
+  void deleteLibraryFile(String name) throws Exception {
+    File file=resolve(name);
+    if(!file.exists())return;
+    if(!file.isFile())throw new IOException("只能删除文件");
+    Files.delete(file.toPath());
+  }
+
   JSONArray list() throws Exception {
     JSONArray out = new JSONArray();
     listDir(root, out, 0);
@@ -63,16 +70,10 @@ final class FileTools {
 
   synchronized String importFile(InputStream input, String name)
     throws Exception {
+    if(name==null)name="导入文件.txt";
     name = name.replaceAll("[\\\\/\\p{Cntrl}]", "_");
     if (name.trim().isEmpty()) name = "导入文件.txt";
-    File f = resolve(name);
-    int n = 1;
-    while (f.exists()) {
-      int dot = name.lastIndexOf('.');
-      String base = dot > 0 ? name.substring(0, dot) : name,
-        ext = dot > 0 ? name.substring(dot) : "";
-      f = resolve(base + " (" + n++ + ")" + ext);
-    }
+    File f = timestamped(resolve(name));
     File tmp = File.createTempFile(".dsh-import-", ".tmp", root);
     try (FileOutputStream out = new FileOutputStream(tmp)) {
       copy(input, out, MAX_BYTES);
@@ -81,8 +82,7 @@ final class FileTools {
       tmp.delete();
       throw e;
     }
-    Files.move(tmp.toPath(), f.toPath());
-    return f.getName();
+    try{f=publishUnique(tmp,f);return f.getName();}finally{tmp.delete();}
   }
 
   static byte[] readLimited(InputStream in, int limit) throws IOException {
@@ -175,10 +175,7 @@ final class FileTools {
 
   synchronized JSONObject write(JSONObject a, boolean document)
     throws Exception {
-    File f = resolve(a.getString("path"));
-    if (f.exists() && !a.optBoolean("overwrite", false)) throw new IOException(
-      "文件已存在，请选择新文件名，或用户明确授权后设置 overwrite"
-    );
+    File f = timestamped(resolve(a.getString("path")));
     String content = a.getString("content");
     if (
       content.getBytes(StandardCharsets.UTF_8).length > 2 * 1024 * 1024
@@ -204,19 +201,42 @@ final class FileTools {
       try (RandomAccessFile file = new RandomAccessFile(tmp, "rw")) {
         file.getFD().sync();
       }
-      Files.move(
-        tmp.toPath(),
-        f.toPath(),
-        StandardCopyOption.ATOMIC_MOVE,
-        StandardCopyOption.REPLACE_EXISTING
-      );
+      f=publishUnique(tmp,f);
     } finally {
       tmp.delete();
     }
     return new JSONObject()
-      .put("path", a.getString("path"))
+      .put("path", root.getCanonicalFile().toPath().relativize(f.toPath()).toString())
       .put("bytes", f.length())
       .put("status", "已生成，可点击对话中的文件链接打开、分享或保存");
+  }
+
+  private File timestamped(File requested){
+    String name=requested.getName();int dot=name.lastIndexOf('.');
+    String base=dot>0?name.substring(0,dot):name,ext=dot>0?name.substring(dot):"";
+    String time=new java.text.SimpleDateFormat("yyyyMMdd_HHmmss_SSS",Locale.ROOT).format(new Date());
+    return new File(requested.getParentFile(),base+"_"+time+ext);
+  }
+
+  // CREATE_NEW atomically reserves an unused name; never truncate an existing file.
+  private File publishUnique(File complete,File requested)throws Exception {
+    String name=requested.getName();int dot=name.lastIndexOf('.');
+    String base=dot>0?name.substring(0,dot):name,ext=dot>0?name.substring(dot):"";
+    for(int suffix=0;;suffix++){
+      File target=suffix==0?requested:new File(requested.getParentFile(),base+"("+suffix+")"+ext);
+      java.nio.channels.FileChannel channel;
+      try{channel=java.nio.channels.FileChannel.open(target.toPath(),java.nio.file.StandardOpenOption.CREATE_NEW,java.nio.file.StandardOpenOption.WRITE);}
+      catch(java.nio.file.FileAlreadyExistsException occupied){continue;}
+      Object identity=Files.readAttributes(target.toPath(),java.nio.file.attribute.BasicFileAttributes.class).fileKey();
+      try(java.nio.channels.FileChannel output=channel;FileInputStream input=new FileInputStream(complete)){
+        byte[] buffer=new byte[8192];int length;
+        while((length=input.read(buffer))!=-1){java.nio.ByteBuffer bytes=java.nio.ByteBuffer.wrap(buffer,0,length);while(bytes.hasRemaining())output.write(bytes);}
+        output.force(true);return target;
+      }catch(Exception error){
+        try{if(identity!=null&&identity.equals(Files.readAttributes(target.toPath(),java.nio.file.attribute.BasicFileAttributes.class).fileKey()))Files.delete(target.toPath());}catch(Exception ignored){}
+        throw error;
+      }
+    }
   }
 
   private static String esc(String s) {

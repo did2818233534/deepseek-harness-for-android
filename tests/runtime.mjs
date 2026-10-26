@@ -10,7 +10,7 @@ fs.mkdirSync(root);
 const workspace = path.join(testHome, "workspace");
 fs.mkdirSync(workspace);
 const token = "test-token";
-let modelName = "test-model", reasoningEffort, autoImageModel=true;
+let modelName = "test-model", reasoningEffort, autoImageModel=true, cleanupConversationFiles=true;
 const modelNotices=[];
 let webEnabled = true, webRequests = [], invalidWeb = false;
 let titleRequests=[], titleMode="ok";
@@ -33,7 +33,7 @@ const bridge = http.createServer(async (req, res) => {
   if (req.url === "/settings") {
     res.end(
       JSON.stringify({
-        model: modelName, autoImageModel,
+        model: modelName, autoImageModel, cleanupConversationFiles,
         hasKey: true,
         maxSteps: 32,
         thinking: false,
@@ -388,9 +388,11 @@ try {
   assert((await api('/sessions', {archived:true})).sessions.some(s => s.id === id));
   assert.notEqual((await api('/state')).id, id, 'archiving active session selects a new session');
   assert.equal((await api('/sessions')).sessions.length, 0, 'replacement empty chat hidden');
+  await until(async()=>!(await api('/sessions',{archived:true})).sessions.find(s=>s.id===id)?.archiveStorage?.state?.match(/packing|restoring/));
   await stop(); await start();
   assert((await api('/sessions', {archived:true})).sessions.some(s => s.id === id), 'archive survives restart');
   await api('/session/archive', {id, archived:false});
+  await until(async()=>(await api('/sessions')).sessions.some(s=>s.id===id));
   assert((await api('/sessions')).sessions.some(s => s.id === id));
   await api('/select', {id});
   assert((await api('/state')).events.some(e => e.type === 'user/message'));
@@ -456,7 +458,7 @@ try {
   autoImageModel=false;
   const disabledSwitch=await fetch('http://127.0.0.1:'+attachmentPort+'/send',{method:'POST',headers:{authorization:'Bearer '+token},body:JSON.stringify({text:'off',attachments:[attachments[0]]})});
   assert.equal(disabledSwitch.status,400);assert((await disabledSwitch.json()).error.includes('图片自动切换模型'));
-  autoImageModel=true;
+  autoImageModel=true, cleanupConversationFiles=true;
   const requestsBeforeModelSwitch = requests.length;
   await api('/send', {text:'切换模型后继续分析之前图片'});
   await until(async () => !(await api('/state')).busy);
@@ -590,6 +592,23 @@ try {
   assert(!('events' in compactState));assert(Array.isArray(compactState.turns));
   assert.equal((await api('/state',{compact:true,stamp:compactState.stamp})).unchanged,true);
   await api('/select');assert.notEqual((await api('/state',{compact:true,stamp:compactState.stamp})).stamp,compactState.stamp);
+  // The deletion endpoint must consult the current setting, not the launch snapshot.
+  mode='text';
+  for(const enabled of [false,true]){
+    cleanupConversationFiles=enabled;
+    const name='cleanup-'+enabled+'.txt';fs.writeFileSync(path.join(workspace,name),'test');
+    await api('/select');const deletingId=(await api('/state')).id;
+    await api('/send',{text:'read attachment',attachments:[{path:name,mime:'text/plain'}]});await settled();
+    await api('/session/delete',{id:deletingId});
+    assert.equal(fs.existsSync(path.join(workspace,name)),!enabled,'cleanup setting honored immediately');
+  }
+  cleanupConversationFiles=true;
+  fs.writeFileSync(path.join(workspace,'报告.txt'),'old report');
+  await api('/select');const oldReportChat=(await api('/state')).id;
+  await api('/send',{text:'review report',attachments:[{path:'报告.txt',mime:'text/plain'}]});await settled();
+  fs.unlinkSync(path.join(workspace,'报告.txt'));fs.writeFileSync(path.join(workspace,'报告.txt'),'newly imported report');
+  await api('/session/delete',{id:oldReportChat});
+  assert.equal(fs.readFileSync(path.join(workspace,'报告.txt'),'utf8'),'newly imported report','deleting old chat preserves same-name replacement');
   console.log(
     "PASS: upstream loop, tool round trip, transcript mapping, durable resume, cancellation, authorization, upstream multi-query search/fetch, malformed response, tool enablement, image transport and durable attachment replay; desktop compaction pressure, overflow recovery, restart, failure, cancellation, pruning and bounded recovery",
   );

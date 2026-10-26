@@ -1,3 +1,4 @@
+import { fileIdentity } from "./file-identity.ts";
 import { supportsImages } from "./vision.ts";
 import fs from 'node:fs';
 import path from 'node:path';
@@ -34,7 +35,8 @@ export function prepareAttachments(workspace: string, input: any, model: string,
     fs.mkdirSync(dir, {recursive:true});
     const stored = path.join(dir, hash);
     if (!fs.existsSync(stored)) fs.writeFileSync(stored, data, {flag:'wx'});
-    return {path:a.path, name:String(a.name || path.basename(a.path)).slice(0,255), mime:mime || String(a.mime || 'application/octet-stream'), bytes, attachmentId:'sha256:'+hash, storedPath:'.attachments/'+hash, mediaType:mime};
+    const originalIdentity=fileIdentity(file);
+    return {fileIdentity:originalIdentity?.sha256===hash?originalIdentity:undefined,storedIdentity:fileIdentity(stored),path:a.path, name:String(a.name || path.basename(a.path)).slice(0,255), mime:mime || String(a.mime || 'application/octet-stream'), bytes, attachmentId:'sha256:'+hash, storedPath:'.attachments/'+hash, mediaType:mime};
   });
 }
 export function attachmentImage(workspace: string, ref: any) {

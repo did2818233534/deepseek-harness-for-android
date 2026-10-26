@@ -1,3 +1,4 @@
+import { packedData, updatePacked } from "./archive-format.ts";
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -17,7 +18,14 @@ export class AndroidSessions extends SessionPersistence {
     const summary={header:data.header,eventCount:data.events.length,revision:String(data.events.length),title:data.title,titleAttempted:data.titleAttempted,archived:data.archived===true,hasMessages:!!first,fallbackTitle:first?.data.source?.userText?.slice(0,45)||first?.data.source?.attachments?.[0]?.name||first?.data.content?.find(b=>b.type==="text")?.text?.slice(0,45)||"新对话"};
     this.summaries.set(id,summary);return summary;
   }
-  summary(id) {return this.summaries.get(id)||this.remember(id,this.load(id));}
+  summary(id) {
+    if(this.summaries.has(id))return this.summaries.get(id);
+    const raw=this.raw(id);if(raw.archiveRef){this.summaries.set(id,raw.summary);return raw.summary;}
+    return this.remember(id,raw);
+  }
+  raw(id){return JSON.parse(fs.readFileSync(this.file(id),"utf8"));}
+  isPacked(id){return !!this.raw(id).archiveRef;}
+  commitPacked(id,stub){this.save(id,stub,true);this.summaries.set(id,stub.summary);}
   failure: Error | null = null;
   constructor(ctx) {
     super(ctx);
@@ -49,14 +57,15 @@ export class AndroidSessions extends SessionPersistence {
   }
   load(id) {
     try {
-      const data=JSON.parse(fs.readFileSync(this.file(id), "utf8"));this.remember(id,data);return data;
+      const raw=this.raw(id);const data=raw.archiveRef?packedData(AndroidSessions.root,id,raw):raw;this.remember(id,data);return data;
     } catch (e) {
       if (e.code === "ENOENT") throw new SessionPersistenceNotFoundError(id);
       throw e;
     }
   }
-  save(id, data) {
+  save(id, data, plain=false) {
     const p = this.file(id);
+    if(!plain && fs.existsSync(p) && this.raw(id).archiveRef)data=updatePacked(AndroidSessions.root,id,data,this.remember(id,data));
     const fd = fs.openSync(p + ".tmp", "w", 0o600);
     try {
       fs.writeFileSync(fd, JSON.stringify(data));
@@ -65,7 +74,7 @@ export class AndroidSessions extends SessionPersistence {
       fs.closeSync(fd);
     }
     fs.renameSync(p + ".tmp", p);
-    this.remember(id,data);
+    if(data.archiveRef)this.summaries.set(id,data.summary);else this.remember(id,data);
     const dir = fs.openSync(AndroidSessions.root, "r");
     try {
       fs.fsyncSync(dir);

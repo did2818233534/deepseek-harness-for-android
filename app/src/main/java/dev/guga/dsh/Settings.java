@@ -111,6 +111,8 @@ final class Settings {
     if (!prefs.edit().putString("reasoningEffort", value).commit()) throw new Exception("设置保存失败");
   }
 
+  boolean cleanupConversationFiles(){return prefs.getBoolean("cleanupConversationFiles",true);}
+  void saveCleanupConversationFiles(boolean enabled)throws Exception{if(!prefs.edit().putBoolean("cleanupConversationFiles",enabled).commit())throw new Exception("设置保存失败");}
   boolean autoImageModel(){return prefs.getBoolean("autoImageModel",defaults.getBoolean(R.bool.default_auto_image_model));}
   void saveAutoImageModel(boolean enabled)throws Exception{if(!prefs.edit().putBoolean("autoImageModel",enabled).commit())throw new Exception("设置保存失败");}
   boolean webSearch() { return prefs.getBoolean("webSearch", defaults.getBoolean(R.bool.default_web_search)); }
@@ -129,6 +131,7 @@ final class Settings {
     return new JSONObject()
       .put("base", base()).put("webSearch", webSearch()).put("webFetch", webFetch())
       .put("model", model()).put("models",modelCapabilities()).put("autoImageModel",autoImageModel())
+      .put("cleanupConversationFiles",cleanupConversationFiles())
       .put("hasKey", !apiKey().isEmpty())
       .put("thinking", !"none".equals(reasoningEffort()))
       .put("reasoningEffort", reasoningEffort())

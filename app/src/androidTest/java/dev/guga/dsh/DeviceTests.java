@@ -305,39 +305,28 @@ public class DeviceTests {
       JSONObject text = new JSONObject()
         .put("path", prefix + ".csv")
         .put("content", "姓名,金额\n张三,12\n李四,18");
-      f.write(text, false);
+      String csv=f.write(text, false).getString("path");
       assertTrue(
         f
-          .read(new JSONObject().put("path", prefix + ".csv"))
+          .read(new JSONObject().put("path", csv))
           .getString("text")
           .contains("张三")
       );
-      try {
-        f.write(text, false);
-        fail("overwrite accepted");
-      } catch (IOException expected) {}
+      assertNotEquals(csv,f.write(text,false).getString("path"));
       try {
         f.resolve("../settings.xml");
         fail("escape accepted");
       } catch (IOException expected) {}
       String doc = "中文文档测试\n第二段内容。";
-      f.write(
-        new JSONObject().put("path", prefix + ".docx").put("content", doc),
-        true
-      );
+      String docx=f.write(new JSONObject().put("path",prefix+".docx").put("content",doc),true).getString("path");
       assertTrue(
         f
-          .read(new JSONObject().put("path", prefix + ".docx"))
+          .read(new JSONObject().put("path",docx))
           .getString("text")
           .contains("第二段内容")
       );
-      f.write(
-        new JSONObject()
-          .put("path", prefix + ".pdf")
-          .put("content", "PDF export test\nSecond line"),
-        true
-      );
-      assertTrue(f.resolve(prefix + ".pdf").length() > 100);
+      String pdf=f.write(new JSONObject().put("path",prefix+".pdf").put("content","PDF export test\nSecond line"),true).getString("path");
+      assertTrue(f.resolve(pdf).length()>100);
       String copy = f.importFile(
         new ByteArrayInputStream("copy".getBytes(StandardCharsets.UTF_8)),
         prefix + ".csv"
@@ -345,8 +334,7 @@ public class DeviceTests {
       assertFalse(copy.equals(prefix + ".csv"));
       f.resolve(copy).delete();
     } finally {
-      for (String ext : new String[] { ".csv", ".docx", ".pdf" })
-        f.resolve(prefix + ext).delete();
+      for(java.io.File file:f.root.listFiles())if(file.getName().startsWith(prefix))file.delete();
     }
   }
 
@@ -395,6 +383,7 @@ public class DeviceTests {
     // Intercept only in-process instrumentation; never sends a test key to a remote endpoint.
     OkHttpClient original = bridge.api;
     AtomicInteger requests = new AtomicInteger();
+    java.util.concurrent.atomic.AtomicReference<String> actualOutput=new java.util.concurrent.atomic.AtomicReference<>();
     String userText = "你的知识库截止到什么时间？中文👋😀 café 𠮷";
     String fileText = "安卓原生文件内容：中文👋😀 café 𠮷";
     String output = "device-test-" + System.nanoTime() + ".txt";
@@ -438,7 +427,7 @@ public class DeviceTests {
             JSONArray ms = req.getJSONArray("messages");
             for (int i = 0; i < ms.length(); i++) if (
               "tool".equals(ms.getJSONObject(i).optString("role"))
-            ) sawTool = true;
+            ) {sawTool=true;actualOutput.set(new JSONObject(ms.getJSONObject(i).getString("content")).getString("path"));}
             if (!sawTool) throw new IOException("missing tool result");
             delta.put("content", "已完成安卓文件处理：中文👋😀 café 𠮷");
           }
@@ -501,7 +490,7 @@ public class DeviceTests {
       assertTrue(
         "native output content",
         new FileTools(getContext())
-          .read(new JSONObject().put("path", output))
+          .read(new JSONObject().put("path", actualOutput.get()))
           .getString("text")
           .equals(fileText)
       );
@@ -523,7 +512,7 @@ public class DeviceTests {
         assertTrue("charset-less internal JSON accepted", legacyResponse.isSuccessful());
       }
       assertEquals("native bridge defaults JSON to UTF-8", fileText,
-        new FileTools(getContext()).read(new JSONObject().put("path", output)).getString("text"));
+        new FileTools(getContext()).read(new JSONObject().put("path", actualOutput.get())).getString("text"));
       final JSONObject renderedState = state;
       final MainActivity[] screen = new MainActivity[1];
       InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
@@ -567,7 +556,7 @@ public class DeviceTests {
     } finally {
       bridge.api = original;
       getContext().getSharedPreferences("settings", 0).edit().clear().commit();
-      new FileTools(getContext()).resolve(output).delete();
+      for(java.io.File f:new FileTools(getContext()).root.listFiles())if(f.getName().startsWith(output.substring(0,output.length()-4)))f.delete();
     }
   }
 }

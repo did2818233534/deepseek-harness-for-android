@@ -208,6 +208,7 @@ public final class MainActivity extends Activity {
       exportPath = saved.getString("exportPath", "");
       messageActions.pendingExport=saved.getString("pendingMarkdown", "");
     }
+    if(saved==null) IncomingFiles.receive(this,getIntent());
     if (
       Build.VERSION.SDK_INT >= 33 &&
       checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
@@ -216,6 +217,10 @@ public final class MainActivity extends Activity {
       new String[] { android.Manifest.permission.POST_NOTIFICATIONS },
       1
     );
+  }
+
+  @Override protected void onNewIntent(Intent intent) {
+    super.onNewIntent(intent);setIntent(intent);IncomingFiles.receive(this,intent);
   }
 
   @Override
@@ -419,7 +424,7 @@ public final class MainActivity extends Activity {
     try {
       request("/session/archive", new JSONObject().put("id", session.getString("id")).put("archived", !archived), () -> {
         revision = -1;
-        Toast.makeText(this, archived ? "已恢复对话" : "已归档", Toast.LENGTH_SHORT).show();
+        Toast.makeText(this, archived ? "正在恢复对话" : "已归档，正在后台整理", Toast.LENGTH_SHORT).show();
         updated.run();
       });
     } catch (Exception e) { toast(e.getMessage()); }
@@ -427,7 +432,7 @@ public final class MainActivity extends Activity {
 
   void deleteSession(JSONObject session, boolean archived, Runnable updated) {
     AlertDialog confirmation = new AlertDialog.Builder(this).setTitle("删除对话？")
-      .setMessage("将永久删除这段聊天记录，无法恢复。文件库中的文件会保留。")
+      .setMessage(new Settings(this).cleanupConversationFiles() ? "将永久删除这段聊天记录及其关联文件，无法恢复。其他对话仍在使用的文件会保留。" : "将永久删除这段聊天记录，无法恢复。文件库中的文件会保留。")
       .setNegativeButton("取消", null)
       .setPositiveButton("删除", (dialog, which) -> {
         try {
@@ -642,6 +647,7 @@ public final class MainActivity extends Activity {
     String error=state.optString("lastError");
     if(turnError==null) {turnError=label("",14,UiStyle.DANGER); turnError.setPadding(dp(14),dp(8),dp(14),dp(14));messages.addView(turnError);}
     ChatTurnView.text(turnError,readableError(error));
+    if(fileLibrary!=null && currentPage==fileLibrary.page && fileLibrary.selecting && !fileLibrary.deleting){fileLibrary.setSelecting(false);return;}
     if(messageActions.active())messageActions.updateForkEnabled();
     if(turns.length()==0&&!busy) scroll.post(() -> scroll.scrollTo(0,0));
     else if((atBottom||changed)&&!historyLoading){int generation=historyGeneration;scroll.post(() -> {if(generation==historyGeneration&&!historyLoading)scroll.scrollTo(0,Math.max(0,messages.getHeight()-scroll.getHeight()));});}
@@ -700,6 +706,7 @@ public final class MainActivity extends Activity {
       dialogs.peek().dismiss();
       return;
     }
+    if(fileLibrary!=null && currentPage==fileLibrary.page && fileLibrary.selecting && !fileLibrary.deleting){fileLibrary.setSelecting(false);return;}
     if(messageActions.active() && currentPage==chatRoot) {messageActions.clear();return;}
     if (!pageHistory.isEmpty()) {
       Runnable cleanup = pageCleanup.remove(currentPage);
@@ -983,7 +990,8 @@ public final class MainActivity extends Activity {
     LinearLayout body = new LinearLayout(this);
     body.setOrientation(LinearLayout.VERTICAL);
     body.setPadding(dp(8), dp(16), dp(8), dp(20));
-    if (!subtitle.isEmpty()) {
+    if (title.equals("文件库")) addFileCleanupSetting(body);
+    if (!subtitle.isEmpty() && !title.equals("文件库")) {
       TextView description = label(subtitle, 13, muted);
       description.setPadding(dp(4), 0, dp(4), dp(12));
       body.addView(description);
@@ -1000,48 +1008,13 @@ public final class MainActivity extends Activity {
   }
 
   void returnToChat() {
+    // Dismiss listeners are queued: remove dialogs now so navigation cannot spin.
+    while (!dialogs.isEmpty()) dialogs.pop().dismiss();
+    if(modelPopup!=null && modelPopup.isShowing()) modelPopup.dismiss();
     while (!pageHistory.isEmpty()) onBackPressed();
   }
 
-  void archivedPage() {
-    LinearLayout body = new LinearLayout(this);
-    body.setOrientation(LinearLayout.VERTICAL);
-    body.setPadding(dp(8), dp(16), dp(8), dp(20));
-    View page = showPage("已归档对话", body);
-    coreIo.execute(() -> {
-      try {
-        JSONArray sessions = Api.call("/sessions", new JSONObject().put("archived", true)).getJSONArray("sessions");
-        runOnUiThread(() -> {
-          if (currentPage != page) return;
-          if (sessions.length() == 0) body.addView(label("暂无归档对话", 16, muted));
-          for (int i = 0; i < sessions.length(); i++) {
-            JSONObject session = sessions.optJSONObject(i);
-            LinearLayout entry = row();
-
-            TextView title = label(session.optString("title", "新对话"), 17, ink);
-            title.setPadding(dp(16), 0, dp(8), 0);
-            title.setSingleLine(true);
-            title.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            entry.addView(title, new LinearLayout.LayoutParams(0, dp(56), 1));
-            ImageButton restore = icon(R.drawable.ic_restore, "恢复对话", v -> {
-              archiveSession(session, true, () -> body.removeView(entry));
-            });
-            restore.setPadding(dp(15), dp(15), dp(15), dp(15));
-            entry.addView(restore, new LinearLayout.LayoutParams(dp(48), dp(48)));
-            ImageButton delete = icon(R.drawable.ic_delete, "删除对话", v -> {
-              deleteSession(session, true, () -> body.removeView(entry));
-            });
-            delete.setImageTintList(android.content.res.ColorStateList.valueOf(0xFFC64040));
-            delete.setPadding(dp(15), dp(15), dp(15), dp(15));
-            entry.addView(delete, new LinearLayout.LayoutParams(dp(48), dp(48)));
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, dp(56));
-            lp.bottomMargin = dp(12);
-            body.addView(entry, lp);
-          }
-        });
-      } catch (Exception e) { toast(e.getMessage()); }
-    });
-  }
+  void archivedPage() {new ArchivedChatsPage(this).open();}
 
   void history() {
     coreIo.execute(() -> {
@@ -1070,22 +1043,16 @@ public final class MainActivity extends Activity {
     }
     panel[0]=bottomPanel("添加附件",choices);
   }
-  Intent imagePickerIntent() {
-    if(android.os.Build.VERSION.SDK_INT>=33) {
-      Intent intent = new Intent(android.provider.MediaStore.ACTION_PICK_IMAGES).setType("image/*");
-      int remaining=Math.max(1,8-attachments.pending.size());
-      if(remaining>1)intent.putExtra(android.provider.MediaStore.EXTRA_PICK_IMAGES_MAX,Math.min(remaining,android.provider.MediaStore.getPickImagesMaxLimit()));
-      return intent;
-    }
-    return new Intent(Intent.ACTION_PICK,android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI).setType("image/*").putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);
-  }
+  Intent imagePickerIntent() { return GalleryPicker.preferred(this); }
   void importImage() {
     attachmentPickerGeneration=attachments.generation;
     if(attachments.pending.size()>=8){toast("每条消息最多添加 8 个附件");return;}
-    try {startActivityForResult(imagePickerIntent(),IMPORT_IMAGE);}
-    catch(android.content.ActivityNotFoundException e) {
-      startActivityForResult(new Intent(Intent.ACTION_GET_CONTENT).setType("image/*").putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true),IMPORT_IMAGE);
+    Intent[] candidates={imagePickerIntent(),GalleryPicker.fallback(8-attachments.pending.size()),GalleryPicker.documentRequest()};
+    for(Intent candidate:candidates){
+      try{startActivityForResult(candidate,IMPORT_IMAGE);return;}
+      catch(android.content.ActivityNotFoundException|SecurityException unavailable){/* Try another system-supported entry. */}
     }
+    toast("没有可用的相册或图片选择器");
   }
   void importFile() {
     attachmentPickerGeneration=attachments.generation;
@@ -1095,30 +1062,30 @@ public final class MainActivity extends Activity {
     startActivityForResult(intent, IMPORT);
   }
 
-  void files() {
-    View origin = currentPage;
-    io.execute(() -> {
-      try {
-        JSONArray rows = new FileTools(this).list();
-        String[] labels = new String[rows.length()];
-        for (int i = 0; i < labels.length; i++) {
-          JSONObject f = rows.getJSONObject(i);
-          labels[i] = f.getString("path") + "\n" + Math.max(1, f.getLong("bytes") / 1024) + " KB";
-        }
-        runOnUiThread(() -> { if (currentPage != origin || isFinishing()) return; sheet("文件库", "导入的资料和生成的文件都在这里", labels, which -> {
-          try {
-            String path = rows.getJSONObject(which).getString("path");
-            sheet(new File(path).getName(), "选择如何使用这份文件", new String[] { "添加到消息", "导出到手机" }, action -> {
-              if (action == 0) { returnToChat(); attachments.addPath(path); }
-              else {
-                exportPath = path;
-                startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
-                  .setType("application/octet-stream").putExtra(Intent.EXTRA_TITLE, new File(path).getName()), EXPORT);
-              }
-            });
-          } catch (Exception e) { toast(e.getMessage()); }
-        }); });
-      } catch (Exception e) { toast(e.getMessage()); }
+  void addFileCleanupSetting(LinearLayout body) {
+    LinearLayout setting = row();
+    setting.setPadding(dp(16),dp(12),dp(16),dp(12));
+    setting.setBackground(shape(UiStyle.SURFACE,24));
+    setting.addView(helpTitle("删除对话时清理关联文件",16,ink,"默认开启。删除对话时，同时清理它导入或生成的文件；其他对话仍引用的文件会保留。关闭后仅删除聊天记录。已导出到手机其他位置的文件不受影响。"),new LinearLayout.LayoutParams(0,-2,1));
+    Settings prefs=new Settings(this);
+    Switch toggle=new Switch(this);
+    toggle.setContentDescription("删除对话时清理关联文件");
+    toggle.setChecked(prefs.cleanupConversationFiles());
+    toggle.setOnCheckedChangeListener((v,checked)->{
+      try {prefs.saveCleanupConversationFiles(checked);}
+      catch(Exception e){toggle.setChecked(prefs.cleanupConversationFiles());toast(e.getMessage());}
+    });
+    setting.addView(toggle,new LinearLayout.LayoutParams(dp(56),dp(48)));
+    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.bottomMargin=dp(16);
+    body.addView(setting,lp);
+  }
+
+  FileLibraryPage fileLibrary;
+  void files() { fileLibrary=new FileLibraryPage(this);fileLibrary.open(); }
+  void fileActions(String path) {
+    sheet(new File(path).getName(), "选择如何使用这份文件", new String[] { "添加到消息", "导出到手机" }, action -> {
+      if(action==0){returnToChat();attachments.addPath(path);}
+      else {exportPath=path;startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("application/octet-stream").putExtra(Intent.EXTRA_TITLE,new File(path).getName()),EXPORT);}
     });
   }
 
