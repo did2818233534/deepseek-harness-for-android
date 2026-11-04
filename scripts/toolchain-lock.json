@@ -1,0 +1,9 @@
+{
+  "nodejsMobile": {
+    "version": "18.20.4",
+    "url": "https://github.com/nodejs-mobile/nodejs-mobile/releases/download/v18.20.4/nodejs-mobile-v18.20.4-android.zip",
+    "sha256": "bd7321eaa1a7602fbe0bb87302df2d79d87835cf4363fbdd17c350dbb485c2af"
+  },
+  "ndk": "29.0.14206865",
+  "androidSdk": 35
+}

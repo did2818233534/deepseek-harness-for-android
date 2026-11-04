@@ -1,0 +1,33 @@
+{
+  "repository": "https://github.com/deepseek-ai/deepseek-harness",
+  "commit": "b830ec950faba0a46dda564be3e2d854afed94f1",
+  "packages": [
+    "packages/core/agent",
+    "packages/core/agent-loop",
+    "packages/core/scope",
+    "packages/core/session",
+    "packages/core/system-prompt",
+    "packages/core/tools",
+    "packages/llm/llm",
+    "packages/sandbox/sandbox",
+    "packages/session/session-persistence",
+    "packages/session/session-projection",
+    "packages/typert/protocol",
+    "packages/util/brand",
+    "packages/util/crypto",
+    "packages/util/timeout",
+    "packages/util/values",
+    "vendor/cordis",
+    "vendor/cosmokit",
+    "vendor/schemastery",
+    "packages/web/web",
+    "packages/web/tool-web",
+    "packages/web/web-deepseek-api",
+    "packages/guard/timeout-policy",
+    "packages/compaction/compaction",
+    "packages/compaction/compaction-basic",
+    "packages/compaction/compaction-tool-result-pruner",
+    "packages/llm/token-meter"
+  ],
+  "modifications": "Source unchanged. Build-time Unicode regex expansion, bundled version substitution, and web-deepseek-api transport redirected to runtime/providers/web-transport.ts (Android HTTPS and Keystore seam)."
+}

@@ -1,0 +1,15 @@
+plugins { id 'com.android.library'; id 'maven-publish' }
+android {
+ namespace 'dev.guga.updates'
+ compileSdk 35
+ defaultConfig { minSdk 28; consumerProguardFiles 'consumer-rules.pro' }
+ compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+ publishing { singleVariant('release') { withSourcesJar() } }
+}
+dependencies { implementation 'com.squareup.okhttp3:okhttp:4.12.0' }
+afterEvaluate {
+ publishing {
+  publications { release(MavenPublication) { from components.release; groupId='dev.guga'; artifactId='release-updater'; version='0.1.0' } }
+  repositories { maven { name='localDistribution'; url=layout.buildDirectory.dir('maven-repository') } }
+ }
+}

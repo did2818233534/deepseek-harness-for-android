@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Non-secret settings verified on the owner's phone. No account data or history. -->
+    <string name="default_api_base" translatable="false">https://api.deepseek.com</string>
+    <string name="default_model" translatable="false">deepseek-v4-pro</string>
+    <string name="default_reasoning_effort" translatable="false">max</string>
+    <bool name="default_web_search">true</bool>
+    <bool name="default_web_fetch">true</bool>
+    <integer name="default_max_steps">32</integer>
+    <bool name="default_auto_image_model">true</bool>
+</resources>
