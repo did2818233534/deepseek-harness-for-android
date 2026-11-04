@@ -19,6 +19,7 @@ final class ChatTurnView extends LinearLayout {
   String turnId="", attachmentKey="";
   final LinearLayout attachmentRow, outputFiles, assistantBody;
   String outputKey="", payload;
+  boolean hasPhoto;
   int contentUpdates;
   final ChatMarkdown markdown;
 
@@ -50,7 +51,7 @@ final class ChatTurnView extends LinearLayout {
     assistantBody=new LinearLayout(host);assistantBody.setOrientation(VERTICAL);assistantBody.setBackground(host.ui.bubble(UiStyle.LOW,false));assistantBody.setClipToOutline(true);addView(assistantBody,bubbleParams(false));
     answer=bubble(false);answer.setBackground(null);assistantBody.addView(answer,new LayoutParams(-2,-2));
     svgContent=new SvgMessageContent(this);svgContent.setBackground(null);assistantBody.addView(svgContent,new LayoutParams(-2,-2));
-    outputFiles=new LinearLayout(host);outputFiles.setOrientation(VERTICAL);outputFiles.setVisibility(GONE);outputFiles.setPadding(host.dp(14),host.dp(2),host.dp(14),host.dp(8));assistantBody.addView(outputFiles,new LayoutParams(-2,-2));
+    outputFiles=new LinearLayout(host);outputFiles.setOrientation(VERTICAL);outputFiles.setVisibility(GONE);outputFiles.setPadding(answer.getPaddingLeft(),host.dp(2),answer.getPaddingRight(),host.dp(8));assistantBody.addView(outputFiles,new LayoutParams(-2,-2));
     ChatMarkdown.links(answer,host);
     user.setOnLongClickListener(v -> {host.messageActions.toggle(turnId+"/u");return true;});
     answer.setOnLongClickListener(v -> {host.messageActions.toggle(turnId+"/a");return true;});
@@ -59,6 +60,13 @@ final class ChatTurnView extends LinearLayout {
     waiting=host.label("正在请求模型…",13,host.muted); waiting.setPadding(host.dp(14),host.dp(4),0,host.dp(14));
     addView(waiting,new LayoutParams(-2,-2));
   }
+  @Override protected void onMeasure(int widthSpec, int heightSpec) {
+    int available = MeasureSpec.getSize(widthSpec) - getPaddingLeft() - getPaddingRight();
+    assistantBody.getLayoutParams().width = hasPhoto && available > 0
+      ? Math.max(1, Math.round(available * .82f)) : LayoutParams.WRAP_CONTENT;
+    super.onMeasure(widthSpec, heightSpec);
+  }
+
   TextView bubble(boolean mine) {
     TextView view=host.label("",16,host.ink); view.setTextIsSelectable(false);
     view.setLineSpacing(host.dp(3),1); view.setPadding(host.dp(14),host.dp(12),host.dp(14),host.dp(12));

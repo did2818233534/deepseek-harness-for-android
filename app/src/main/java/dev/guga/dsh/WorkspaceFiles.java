@@ -78,12 +78,20 @@ final class WorkspaceFiles {
       }
       Drawable drawable=decode(file,2048);
       host.runOnUiThread(()->{if(host.isDestroyed())return;
-        LinearLayout page=host.showPage("图片预览",new LinearLayout(host));page.removeViewAt(1);LinearLayout header=(LinearLayout)page.getChildAt(0);
-        TextView title=host.label(file.getName(),16,UiStyle.INK);title.setSingleLine(true);title.setEllipsize(android.text.TextUtils.TruncateAt.END);title.setPadding(host.dp(12),0,0,0);header.addView(title,new LinearLayout.LayoutParams(0,-2,1));
-        header.addView(host.icon(R.drawable.ic_share,"分享图片",v->actions(host,path,true)),new LinearLayout.LayoutParams(host.dp(48),host.dp(48)));
-        ZoomImageView image=new ZoomImageView(host);image.setContentDescription("图片预览，可双指缩放、双击放大，长按分享或保存");image.setImageDrawable(drawable);image.setOnLongClickListener(v->{actions(host,path,true);return true;});page.addView(image,new LinearLayout.LayoutParams(-1,0,1));
+        ZoomImageView image=new ZoomImageView(host);
+        image.setImageDrawable(drawable);
+        image.setContentDescription("图片预览，轻点返回，双指缩放，长按分享或保存");
+        image.setOnClickListener(v->host.onBackPressed());
+        image.setOnLongClickListener(v->{actions(host,path,true);return true;});
+        View decor=host.getWindow().getDecorView();
+        int previousFlags=decor.getSystemUiVisibility();
+        host.pushPage(image);
+        decor.setSystemUiVisibility(previousFlags | View.SYSTEM_UI_FLAG_FULLSCREEN |
+          View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
+          View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+          View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
         if(drawable instanceof Animatable)((Animatable)drawable).start();
-        host.pageCleanup.put(page,()->{if(drawable instanceof Animatable)((Animatable)drawable).stop();image.setImageDrawable(null);});
+        host.pageCleanup.put(image,()->{decor.setSystemUiVisibility(previousFlags);if(drawable instanceof Animatable)((Animatable)drawable).stop();image.setImageDrawable(null);});
       });
     }catch(Exception e){host.toast("无法预览图片："+e.getMessage());}});
   }

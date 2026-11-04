@@ -19,7 +19,7 @@ final class ArtifactViews {
     return new JSONArray(files.values());
   }
   static void fill(ChatTurnView owner,JSONArray files){
-    LinearLayout row=owner.outputFiles;row.removeAllViews();MainActivity host=owner.host;
+    LinearLayout row=owner.outputFiles;row.removeAllViews();owner.hasPhoto=false;MainActivity host=owner.host;
     for(int n=0;n<files.length();n++){
       JSONObject file=files.optJSONObject(n);if(file==null)continue;String path=file.optString("path");if(WorkspaceFiles.linkPath(path)==null)continue;
       boolean svg=path.toLowerCase(Locale.ROOT).endsWith(".svg");
@@ -31,9 +31,9 @@ final class ArtifactViews {
         picture.setContentDescription("SVG 图片："+file.optString("name",path));
         host.io.execute(()->{try{File actual=new FileTools(host).resolve(path);if(actual.length()>512*1024)throw new IOException("SVG 过大");String source=new String(java.nio.file.Files.readAllBytes(actual.toPath()),java.nio.charset.StandardCharsets.UTF_8);host.runOnUiThread(()->picture.content(source));}catch(Exception ignored){}});
       }else if(image){
-        ImageView picture=new ImageView(host);picture.setScaleType(ImageView.ScaleType.FIT_CENTER);picture.setBackground(host.ui.surface(UiStyle.LOW,18));picture.setClipToOutline(true);picture.setImageResource(R.drawable.ic_image);picture.setContentDescription("图片："+file.optString("name",path));
-        int width=Math.min(host.dp(260),host.getResources().getDisplayMetrics().widthPixels-host.dp(64));
-        card=picture;card.setLayoutParams(new LinearLayout.LayoutParams(width,host.dp(180)));
+        owner.hasPhoto=true;
+        ImageView picture=new ImageView(host);picture.setAdjustViewBounds(true);picture.setScaleType(ImageView.ScaleType.FIT_CENTER);picture.setBackground(host.ui.surface(UiStyle.LOW,18));picture.setClipToOutline(true);picture.setImageResource(R.drawable.ic_image);picture.setContentDescription("图片："+file.optString("name",path));
+        card=picture;card.setLayoutParams(new LinearLayout.LayoutParams(-1,-2));
         host.io.execute(()->{try{File actual=new FileTools(host).resolve(path);if(actual.length()>FileTools.MAX_BYTES)throw new IOException("图片过大");var drawable=WorkspaceFiles.decode(actual,1024);
           host.runOnUiThread(()->{if(host.isDestroyed())return;picture.setImageDrawable(drawable);if(drawable instanceof Animatable)((Animatable)drawable).start();
             picture.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener(){public void onViewAttachedToWindow(View v){if(drawable instanceof Animatable)((Animatable)drawable).start();}public void onViewDetachedFromWindow(View v){if(drawable instanceof Animatable)((Animatable)drawable).stop();}});
@@ -46,8 +46,10 @@ final class ArtifactViews {
       View target=card instanceof InlineSvgView?((InlineSvgView)card).touch:card;
       target.setOnClickListener(v->{if(host.messageActions.active())host.messageActions.toggle(owner.turnId+"/a");else if(image)WorkspaceFiles.preview(host,path);else WorkspaceFiles.open(host,path);});
       target.setOnLongClickListener(v->{WorkspaceFiles.actions(host,path,image&&!svg);return true;});
-      LinearLayout.LayoutParams p=card.getLayoutParams() instanceof LinearLayout.LayoutParams?(LinearLayout.LayoutParams)card.getLayoutParams():new LinearLayout.LayoutParams(-2,-2);p.bottomMargin=host.dp(image?8:2);row.addView(card,p);
+      LinearLayout.LayoutParams p=card.getLayoutParams() instanceof LinearLayout.LayoutParams?(LinearLayout.LayoutParams)card.getLayoutParams():new LinearLayout.LayoutParams(-2,-2);
+      p.bottomMargin=host.dp(image?8:2);row.addView(card,p);
     }
+    row.getLayoutParams().width=owner.hasPhoto?LinearLayout.LayoutParams.MATCH_PARENT:LinearLayout.LayoutParams.WRAP_CONTENT;
     row.setVisibility(row.getChildCount()==0?View.GONE:View.VISIBLE);
   }
 }

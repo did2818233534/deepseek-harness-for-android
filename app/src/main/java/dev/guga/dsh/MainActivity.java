@@ -623,9 +623,16 @@ public final class MainActivity extends Activity {
     } else moveTaskToBack(true);
   }
 
-  LinearLayout showPage(String title, LinearLayout body) {
+  void pushPage(View page) {
     ((android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE))
       .hideSoftInputFromWindow(input.getWindowToken(), 0);
+    pageHistory.push(currentPage);
+    currentPage = page;
+    settingsPage = true;
+    setContentView(page);
+  }
+
+  LinearLayout showPage(String title, LinearLayout body) {
     LinearLayout page = new LinearLayout(this);
     page.setOrientation(LinearLayout.VERTICAL);
     page.setBackgroundColor(bg);
@@ -644,10 +651,7 @@ public final class MainActivity extends Activity {
     content.setFillViewport(true);
     content.addView(body);
     page.addView(content, new LinearLayout.LayoutParams(-1, 0, 1));
-    pageHistory.push(currentPage);
-    currentPage = page;
-    settingsPage = true;
-    setContentView(page);
+    pushPage(page);
     if (Build.VERSION.SDK_INT >= 30) page.setOnApplyWindowInsetsListener((v, insets) -> {
       android.graphics.Insets bars = insets.getInsets(WindowInsets.Type.systemBars());
       page.setPadding(dp(16), bars.top + dp(8), dp(16),

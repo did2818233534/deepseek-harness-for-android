@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Package both Android editions; pre-edition clients follow Lite."""
+import argparse
 import hashlib
 import json
 from pathlib import Path
@@ -7,6 +8,9 @@ import shutil
 
 root = Path(__file__).resolve().parent.parent
 repo = 'https://github.com/did2818233534/deepseek-harness-for-android'
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--build-tag", action="store_true", help="Include versionCode in the release tag when reissuing a version")
+args = parser.parse_args()
 checksums = []
 expected = None
 for edition, package in [('lite', 'dev.guga.dsh'), ('full', 'dev.guga.dsh.full')]:
@@ -25,7 +29,8 @@ for edition, package in [('lite', 'dev.guga.dsh'), ('full', 'dev.guga.dsh.full')
         if abi in architectures:
             raise ValueError('Duplicate output ' + abi)
         architectures.add(abi)
-        destination = root / 'dist' / ('release-' + version)
+        release = f'{version}-build.{code}' if args.build_tag else version
+        destination = root / 'dist' / ('release-' + release)
         destination.mkdir(parents=True, exist_ok=True)
         name = f'DSH-Pocket-{version}-{edition}-{abi}.apk'
         target = destination / name
@@ -34,7 +39,7 @@ for edition, package in [('lite', 'dev.guga.dsh'), ('full', 'dev.guga.dsh.full')
             sha = hashlib.file_digest(src, 'sha256').hexdigest()
         checksums.append(f'{sha}  {name}')
         if abi != 'universal':
-            assets[abi] = {'url': f'{repo}/releases/download/v{version}/{name}', 'size': target.stat().st_size, 'sha256': sha}
+            assets[abi] = {'url': f'{repo}/releases/download/v{release}/{name}', 'size': target.stat().st_size, 'sha256': sha}
     if architectures != {'arm64-v8a','x86_64','universal'}:
         raise ValueError('Missing expected APKs for ' + edition)
     manifest = {'schema': 1, 'versionName': version, 'versionCode': code, 'assets': assets}

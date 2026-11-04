@@ -28,6 +28,33 @@ public class ArtifactTests {
    assertNotEquals(MainActivity.IMPORT_IMAGE,MessageActions.SAVE_MARKDOWN);
   }finally{file.delete();}
  }
+ @Test public void photosFillBubbleAtTheirOriginalAspectRatio() throws Exception {
+   var instrumentation=InstrumentationRegistry.getInstrumentation();
+   var context=instrumentation.getTargetContext();
+   File image=new FileTools(context).resolve("photo-layout-test.png");
+   Bitmap bitmap=Bitmap.createBitmap(40,80,Bitmap.Config.ARGB_8888);
+   try(FileOutputStream out=new FileOutputStream(image)){bitmap.compress(Bitmap.CompressFormat.PNG,100,out);}
+   bitmap.recycle();
+   MainActivity activity=(MainActivity)instrumentation.startActivitySync(new Intent(context,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+   try {
+     ChatTurnView[] turn=new ChatTurnView[1];
+     JSONArray files=new JSONArray().put(new JSONObject().put("path",image.getName()));
+     instrumentation.runOnMainSync(()->{turn[0]=new ChatTurnView(activity);ArtifactViews.fill(turn[0],files);});
+     activity.io.submit(()->{}).get();
+     instrumentation.runOnMainSync(()->{
+       ImageView photo=(ImageView)turn[0].outputFiles.getChildAt(0);
+       for(int width:new int[]{320,600}){
+         turn[0].measure(View.MeasureSpec.makeMeasureSpec(width,View.MeasureSpec.EXACTLY),View.MeasureSpec.UNSPECIFIED);
+         turn[0].layout(0,0,width,turn[0].getMeasuredHeight());
+         int bubbleWidth=turn[0].assistantBody.getWidth();
+         assertEquals(Math.round(width*.82f),bubbleWidth);
+         assertEquals(turn[0].answer.getPaddingLeft(),photo.getLeft());
+         assertEquals(turn[0].answer.getPaddingRight(),bubbleWidth-photo.getRight());
+         assertEquals(photo.getMeasuredWidth()*2,photo.getMeasuredHeight());
+       }
+     });
+   } finally {instrumentation.runOnMainSync(activity::finish);image.delete();}
+ }
  static void touch(View v,int action,long down,long time,float x,float y){MotionEvent e=MotionEvent.obtain(down,time,action,x,y,0);v.dispatchTouchEvent(e);e.recycle();}
  @Test public void inlineImageZoomLongPressAndMessageSelection() throws Exception {
   var i=InstrumentationRegistry.getInstrumentation();var c=i.getTargetContext();
@@ -39,7 +66,12 @@ public class ArtifactTests {
    i.runOnMainSync(()->{a.visible=false;a.render(state);assertEquals(1,a.turnViews.get("1").outputFiles.getChildCount());assertSame(a.turnViews.get("1").assistantBody,a.turnViews.get("1").outputFiles.getParent());assertSame(a.turnViews.get("1").assistantBody,a.turnViews.get("1").answer.getParent());a.turnViews.get("1").outputFiles.getChildAt(0).performClick();});
    long deadline=System.currentTimeMillis()+5000;while(a.currentPage==a.chatRoot&&System.currentTimeMillis()<deadline)Thread.sleep(30);
    i.waitForIdleSync();Thread.sleep(150);ZoomImageView[] image=new ZoomImageView[1];
-   i.runOnMainSync(()->image[0]=(ZoomImageView)((LinearLayout)a.currentPage).getChildAt(1));
+   i.runOnMainSync(()->{
+     image[0]=(ZoomImageView)a.currentPage;
+     View decor=a.getWindow().getDecorView();
+     assertEquals(decor.getWidth(),image[0].getWidth());
+     assertEquals(decor.getHeight(),image[0].getHeight());
+   });
    long t=android.os.SystemClock.uptimeMillis();
    i.runOnMainSync(()->{touch(image[0],0,t,t,150,150);touch(image[0],1,t,t+40,150,150);touch(image[0],0,t+120,t+120,150,150);touch(image[0],1,t+120,t+160,150,150);assertTrue(image[0].zoom>1);});
    Thread.sleep(350);long press=android.os.SystemClock.uptimeMillis();i.runOnMainSync(()->touch(image[0],0,press,press,150,150));Thread.sleep(ViewConfiguration.getLongPressTimeout()+150);
