@@ -1,22 +1,2 @@
 <inset xmlns:android="http://schemas.android.com/apk/res/android"
-    android:inset="18dp">
-    <vector
-        android:width="72dp"
-        android:height="72dp"
-        android:viewportWidth="1254"
-        android:viewportHeight="1254">
-        <path
-            android:fillColor="#4285F4"
-            android:fillType="evenOdd"
-            android:pathData="M134,674 L134,580 Q134,388 350,388 L529,388 Q700,388 794,536 Q854,631 914,574 Q947,543 938,477 L1006,470 Q1035,543 1035,629 Q1035,838 825,926 L825,643 Q825,613 794,613 L767,613 Q738,613 738,645 L738,696 Q738,725 707,725 L680,725 Q648,725 648,696 L648,645 Q648,613 617,613 L590,613 Q560,613 560,645 L560,839 Q410,733 134,674 Z M272,591 A34,34 0,1 0,340,591 A34,34 0,1 0,272,591 Z M648,894 L648,818 Q648,789 677,789 L708,789 Q738,789 738,818 L738,932 Z" />
-        <path
-            android:fillColor="#34A853"
-            android:pathData="M134,673 C312,672 437,685 560,839 Q647,937 813,938 Q700,974 510,955 Q188,930 134,673 Z" />
-        <path
-            android:fillColor="#EA4335"
-            android:pathData="M958,478 Q776,463 771,297 Q771,285 785,290 Q896,292 958,390 Z" />
-        <path
-            android:fillColor="#FBBC04"
-            android:pathData="M958,478 L958,390 Q1020,292 1136,291 Q1146,290 1143,308 Q1138,451 958,478 Z" />
-    </vector>
-</inset>
+    android:drawable="@drawable/ic_launcher_whale" android:inset="18dp" />

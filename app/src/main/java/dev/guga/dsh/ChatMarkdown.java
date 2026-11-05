@@ -39,7 +39,32 @@ final class ChatMarkdown {
       .usePlugin(TaskListPlugin.create(context)).build();
     if(host!=null)host.markdownRenderer=renderer;
   }
+  // A plain paragraph after a formatted block can grow without resetting the
+  // spans and measured layout of the blocks above it.
+  boolean appendParagraph(TextView view, String next) {
+    if (source == null || source.isEmpty() || !next.startsWith(source)) return false;
+    int start = source.lastIndexOf("\n\n");
+    if (start < 0 && !plain) return false;
+    int paragraphStart = start < 0 ? 0 : start + 2;
+    if (paragraphStart >= source.length()) return false;
+    String tail = next.substring(paragraphStart);
+    if (!tail.codePoints().allMatch(c -> Character.isLetterOrDigit(c) || c == ' ' ||
+        "，。！？、；：".indexOf(c) >= 0) || !Character.isLetterOrDigit(tail.codePointAt(0))) return false;
+    CharSequence displayed = view.getText();
+    int oldTail = source.length() - paragraphStart;
+    if (!(displayed instanceof Spanned) || displayed.length() < oldTail ||
+        !android.text.TextUtils.regionMatches(displayed, displayed.length()-oldTail, source, paragraphStart, oldTail)) return false;
+    Spanned spans = (Spanned) displayed;
+    if (spans.getSpans(displayed.length()-oldTail, displayed.length(), android.text.style.CharacterStyle.class).length != 0 ||
+        spans.getSpans(displayed.length()-oldTail, displayed.length(), android.text.style.ParagraphStyle.class).length != 0) return false;
+    view.append(next, source.length(), next.length());
+    return true;
+  }
   void update(TextView view,String markdown) {
+    if (!markdown.equals(source) && appendParagraph(view, markdown)) {
+      source = markdown;
+      return;
+    }
     if(!markdown.equals(source)) {
       source=markdown;
       // Table rows discover wrapped cell heights during drawing. Markwon's

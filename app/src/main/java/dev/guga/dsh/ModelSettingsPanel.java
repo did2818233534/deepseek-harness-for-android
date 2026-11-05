@@ -28,6 +28,9 @@ final class ModelSettingsPanel {
   ImageButton refresh;
   TextView state;
   Switch search, fetch, autoImageModel;
+  Switch timeout;
+  EditText seconds;
+  LinearLayout durationBox;
   String effort;
   static final String[] EFFORTS = {"none", "low", "high", "max"};
   static final String[] EFFORT_LABELS = {"关闭", "低", "高", "最高"};
@@ -74,6 +77,13 @@ final class ModelSettingsPanel {
     effort = settings.reasoningEffort();
     effortControl();
     if (!quick) {
+      timeout = toggle("最长思考时间", values.optBoolean("limitThinking"), "从收到思考内容开始累计本轮思考时间。到时若仍在思考，会停止当前请求，用相同问题和已有工具结果关闭思考重新请求，每轮最多切换一次。正在输出的正文不会中断。部分推理可能丢失，两次请求都可能计费，最终回答仍需等待网络和模型响应。");
+      durationBox = new LinearLayout(a); durationBox.setOrientation(LinearLayout.VERTICAL);
+      box.addView(durationBox);
+      seconds = a.field(durationBox, "思考时间（秒）", String.valueOf(values.optInt("thinkingSeconds",30)), false);
+      seconds.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+      durationBox.setVisibility(timeout.isChecked() ? View.VISIBLE : View.GONE);
+      watch(seconds);
       key = a.secretField(box, "API Key", settings.apiKey());
       key.setSelectAllOnFocus(true);
     }
@@ -156,6 +166,7 @@ final class ModelSettingsPanel {
       if (!persist()) {
         editing = true; toggle.setChecked(!value); editing = false;
       }
+      if (toggle == timeout) durationBox.setVisibility(toggle.isChecked() ? View.VISIBLE : View.GONE);
     });
     return toggle;
   }
@@ -177,6 +188,14 @@ final class ModelSettingsPanel {
       JSONObject current = settings.publicData();
       int count = quick ? current.optInt("maxSteps", 32) : Integer.parseInt(steps.getText().toString());
       if (count < 1 || count > 128) throw new Exception("步骤数应为 1–128");
+      if (!quick) {
+        int duration = current.optInt("thinkingSeconds",30);
+        if (timeout.isChecked()) {
+          try { duration = Integer.parseInt(seconds.getText().toString()); } catch (NumberFormatException ignored) { duration=0; }
+          if (duration < 1 || duration > 2147483) throw new Exception("请输入 1 至 2147483 之间的秒数");
+        }
+        settings.saveThinkingLimit(timeout.isChecked(),duration);
+      }
       settings.save(settings.base(), selected, quick ? "" : key.getText().toString(),
         !effort.equals("none"), count);
       settings.saveReasoningEffort(effort);
@@ -200,8 +219,12 @@ final class ModelSettingsPanel {
       text.addView(name);
       TextView api = a.label(id, 12, a.muted); api.setPadding(0, a.dp(4), 0, 0); text.addView(api);
       row.addView(text, new LinearLayout.LayoutParams(0, -2, 1));
-      TextView check = a.label(id.equals(selected) ? "✓" : "", 20, a.accent);
-      check.setPadding(a.dp(12), 0, 0, 0); row.addView(check);
+      ImageView check = new ImageView(a);
+      check.setImageResource(R.drawable.ic_check);
+      check.setImageTintList(android.content.res.ColorStateList.valueOf(a.accent));
+      check.setVisibility(id.equals(selected) ? View.VISIBLE : View.INVISIBLE);
+      LinearLayout.LayoutParams checkParams = new LinearLayout.LayoutParams(a.dp(24),a.dp(24));
+      checkParams.setMarginStart(a.dp(12));row.addView(check,checkParams);
       row.setContentDescription("选择 " + id); row.setFocusable(true);
       row.setOnClickListener(v -> {
         String previous = selected; selected = id;

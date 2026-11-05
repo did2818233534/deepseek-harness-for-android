@@ -10,7 +10,7 @@ fs.mkdirSync(root);
 const workspace = path.join(testHome, "workspace");
 fs.mkdirSync(workspace);
 const token = "test-token";
-let packageTools=false,customInstructions="";
+let packageTools=false,customInstructions="",limitThinking=false,thinkingSeconds=1;
 let modelName = "test-model", reasoningEffort, autoImageModel=true, cleanupConversationFiles=true;
 const modelNotices=[];
 let webEnabled = true, webRequests = [], invalidWeb = false;
@@ -34,7 +34,7 @@ const bridge = http.createServer(async (req, res) => {
   if (req.url === "/settings") {
     res.end(
       JSON.stringify({
-        customInstructions, packageTools, model: modelName, autoImageModel, cleanupConversationFiles,
+        limitThinking,thinkingSeconds,customInstructions, packageTools, model: modelName, autoImageModel, cleanupConversationFiles,
         hasKey: true,
         maxSteps: 32,
         thinking: false,
@@ -44,7 +44,7 @@ const bridge = http.createServer(async (req, res) => {
     );
     return;
   }
-  if (req.url === "/status" || req.url === "/cancel-network") {
+  if (req.url === "/status" || req.url === "/cancel-network" || req.url === "/cancel-model") {
     if(req.url==="/status")statusBusy=b.busy;
     res.end("{}");
     return;
@@ -69,6 +69,14 @@ const bridge = http.createServer(async (req, res) => {
     }
     requests.push(b);
     res.setHeader("content-type", "text/event-stream");
+    if(mode==='deadline'){
+      if(b.thinking.type==='enabled'){
+        res.write('data: '+JSON.stringify({choices:[{delta:{reasoning_content:'超时前的思考'}}]})+'\n\n');
+        return;
+      }
+      res.end('data: '+JSON.stringify({choices:[{delta:{content:'快速回答完成'},finish_reason:'stop'}]})+'\n\ndata: [DONE]\n\n');
+      return;
+    }
     if(mode==='parallel'){
       const name=b.messages.filter(m=>m.role==='user').at(-1).content;
       res.write('data: '+JSON.stringify({choices:[{delta:{content:'stream '+name}}]})+'\n\n');
@@ -474,7 +482,7 @@ try {
 
   modelName = 'test-model';
 
-  for (const bad of [[{path:'../runtime/runtime-port',mime:'image/png'}], [{path:'备注.txt',mime:'image/png'}], Array(9).fill(attachments[0])]) {
+  for (const bad of [[{path:'../runtime/runtime-port',mime:'image/png'}], [{path:'备注.txt',mime:'image/png'}]]) {
     const response = await fetch('http://127.0.0.1:'+attachmentPort+'/send', {method:'POST',headers:{authorization:'Bearer '+token},body:JSON.stringify({text:'invalid',attachments:bad})});
     assert.equal(response.status,400,'invalid attachment is rejected before sending');
   }
@@ -496,6 +504,28 @@ try {
   // Exercise the actual bundled desktop policy, transport, durable replay and UI projection.
   const settled = () => until(async()=>{const s=await api('/state');return !s.busy?s:null;});
   const eventsOnDisk = id => JSON.parse(fs.readFileSync(path.join(root,'sessions',id+'.json'),'utf8')).events;
+  await api('/select');
+  limitThinking=true;reasoningEffort='high';mode='deadline';
+  const beforeDeadline=requests.length;
+  await api('/send',{text:'测试思考超时'});
+  await until(async()=>!(await api('/state')).busy);
+  const deadlineState=await api('/state');
+  assert.equal(requests.length,beforeDeadline+2,'deadline retries once');
+  assert.equal(requests.at(-1).thinking.type,'disabled');
+  assert.equal(deadlineState.turns.at(-1).text,'快速回答完成');
+  assert(deadlineState.turns.at(-1).reasoning.includes('超时前的思考'));
+  assert(!deadlineState.lastError,JSON.stringify(deadlineState.lastError));
+  await api('/send',{text:'再次超时'});
+  await until(async()=>!(await api('/state')).busy);
+  assert.equal(requests.length,beforeDeadline+4,'new turn resets budget');
+  await api('/send',{text:'取消超时请求'});
+  await until(async()=>(await api('/state')).turns.at(-1)?.reasoning);
+  await api('/cancel');
+  await until(async()=>!(await api('/state')).busy);
+  const canceledCount=requests.length;
+  await new Promise(r=>setTimeout(r,1200));
+  assert.equal(requests.length,canceledCount,'cancellation never restarts request');
+  limitThinking=false;reasoningEffort=undefined;
   modelName='deepseek-flash'; mode='compact-ok';
   await api('/select');
   await api('/send',{text:'需要保留的原始任务。'.repeat(3000)}); await settled();

@@ -62,7 +62,7 @@ final class NativeBridge extends NanoHTTPD {
   }
 
   static long requestLimit(String route) {
-    return ("/model".equals(route) ? 48L : 3L) * 1024 * 1024;
+    return "/model".equals(route) ? Long.MAX_VALUE : 3L * 1024 * 1024;
   }
 
   @Override
@@ -110,6 +110,11 @@ final class NativeBridge extends NanoHTTPD {
           return ok(new JSONObject().put("ok", true));
         case "/web-api":
           return ok(webApi(input));
+        case "/cancel-model":
+          String requestId=input.optString("androidRequestId");
+          okhttp3.Call pendingModel=modelCalls.get(requestId);
+          if(pendingModel!=null)pendingModel.cancel();
+          return ok(new JSONObject().put("ok",true));
         case "/model":
           return model(input);
         case "/tool":
@@ -166,15 +171,21 @@ final class NativeBridge extends NanoHTTPD {
       .build();
   }
 
+  final java.util.concurrent.ConcurrentHashMap<String,okhttp3.Call> modelCalls=new java.util.concurrent.ConcurrentHashMap<>();
+
   private Response model(JSONObject input) throws Exception {
     String sessionId=input.optString("sessionId");input.remove("sessionId");
-    okhttp3.Response remote = api
-      .newCall(request(settings.base() + "/chat/completions", input.toString()).newBuilder().tag(String.class,sessionId).build())
-      .execute();
+    String requestId=input.optString("androidRequestId");input.remove("androidRequestId");
+    okhttp3.Call call=api.newCall(request(settings.base() + "/chat/completions", input.toString()).newBuilder().tag(String.class,sessionId).build());
+    modelCalls.put(requestId,call);
+    okhttp3.Response remote;
+    try { remote=call.execute(); }
+    catch(Exception e){modelCalls.remove(requestId,call);throw e;}
     if (!remote.isSuccessful()) {
       String message = remote.body() == null ? "" : remote.body().string();
       int code = remote.code();
       remote.close();
+      modelCalls.remove(requestId,call);
       throw new IOException(
         "模型 API " +
           code +
@@ -184,6 +195,7 @@ final class NativeBridge extends NanoHTTPD {
     }
     if (remote.body() == null) {
       remote.close();
+      modelCalls.remove(requestId,call);
       throw new IOException("模型没有返回内容");
     }
     InputStream stream = new FilterInputStream(remote.body().byteStream()) {
@@ -193,6 +205,7 @@ final class NativeBridge extends NanoHTTPD {
           super.close();
         } finally {
           remote.close();
+          modelCalls.remove(requestId,call);
         }
       }
     };

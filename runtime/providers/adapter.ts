@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { supportsImages } from "./vision.ts";
 import { attachmentImage } from "../files/attachments.ts";
 import { StringDecoder } from "node:string_decoder";
@@ -21,7 +22,58 @@ export class AndroidAdapter extends LlmAdapter {
       defaultMaxTokens: effort === "none" ? 8192 : effort === "max" ? 131072 : 65536,
     };
   }
+  private thinkingBudgets = new WeakMap<object, {remaining:number, fast:boolean}>();
   async *stream(options) {
+    const settings=this.settings();
+    if (!settings.limitThinking || settings.reasoningEffort==="none" ||
+        options.purpose==="session-title" || options.purpose==="compaction") {
+      yield* this.requestStream(options,false);
+      return;
+    }
+    let budget=this.thinkingBudgets.get(settings);
+    if(!budget) {
+      budget={remaining:Math.max(1,Number(settings.thinkingSeconds)||30)*1000,fast:false};
+      this.thinkingBudgets.set(settings,budget);
+    }
+    if(budget.fast){yield* this.requestStream(options,true);return;}
+    const controller=new AbortController();
+    const abort=()=>controller.abort(options.signal?.reason);
+    options.signal?.addEventListener("abort",abort,{once:true});
+    if(options.signal?.aborted)abort();
+    let timer, startedAt=0, expired=false, committed=false, thought="";
+    const stopTimer=()=>{
+      clearTimeout(timer);
+      if(startedAt){budget.remaining=Math.max(0,budget.remaining-(performance.now()-startedAt));startedAt=0;}
+    };
+    try {
+      for await(const chunk of this.requestStream({...options,signal:controller.signal},false)) {
+        if(chunk.type==="reasoning-delta"){
+          thought+=chunk.text;
+          if(!startedAt&&!committed) {
+            startedAt=performance.now();
+            timer=setTimeout(()=>{expired=true;controller.abort(new Error("Thinking deadline"));},budget.remaining);
+          }
+        }
+        if(chunk.type==="text-delta"||chunk.type==="tool-call-delta"){committed=true;stopTimer();}
+        yield chunk;
+      }
+    } catch(error) {
+      options.signal?.throwIfAborted();
+      if(!expired)throw error;
+    } finally {
+      stopTimer();
+      options.signal?.removeEventListener("abort",abort);
+    }
+    if(expired) {
+      options.signal?.throwIfAborted();
+      budget.fast=true;
+      if(thought)yield {type:"block-end",index:0,block:{type:"reasoning",text:thought}};
+      // A separate index range keeps the abandoned reasoning block distinct.
+      for await(const chunk of this.requestStream(options,true))
+        yield "index" in chunk ? {...chunk,index:chunk.index+100} : chunk;
+    }
+  }
+  async *requestStream(options, fast:boolean) {
     const omitImages = !supportsImages(options.model, this.settings().models);
     const messages = options.messages.map((m) => {
       const text = m.content
@@ -67,11 +119,17 @@ export class AndroidAdapter extends LlmAdapter {
         type: "function",
         function: t,
       }));
-    const configuredEffort = options.purpose === "session-title" ? "none" : this.settings().reasoningEffort;
+    if(fast)messages.push({role:"user",content:"请根据原问题及已经取得的工具结果直接给出回答；资料不足时请明确说明，避免重复执行已经完成的操作。"});
+    const configuredEffort = fast || options.purpose === "session-title" ? "none" : this.settings().reasoningEffort;
     const effort = ["none", "low", "high", "max"].includes(configuredEffort) ? configuredEffort : "high";
     body.thinking = {type: effort === "none" ? "disabled" : "enabled"};
     if (effort !== "none") body.reasoning_effort = effort;
-    if (Buffer.byteLength(JSON.stringify(body), "utf8") > 48 * 1024 * 1024) throw Error("当前对话的图片总量过大，请新建对话或减少图片后重试");
+    const requestId=crypto.randomUUID();
+    body.androidRequestId=requestId;
+    const cancel=()=>{void this.bridge("/cancel-model",{androidRequestId:requestId}).catch(()=>{});};
+    options.signal?.throwIfAborted();
+    options.signal?.addEventListener("abort",cancel,{once:true});
+    try {
     let response;
     try {
       response = await this.bridge("/model", body, options.signal, true);
@@ -201,5 +259,6 @@ export class AndroidAdapter extends LlmAdapter {
               : "stop",
       },
     };
+    } finally { options.signal?.removeEventListener("abort",cancel); }
   }
 }

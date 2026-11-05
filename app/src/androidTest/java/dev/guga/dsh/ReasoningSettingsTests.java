@@ -10,7 +10,7 @@ import org.junit.Test;
 
 public class ReasoningSettingsTests {
   @Test public void onlyModelBridgeAllowsLargeImagePayloads() {
-    assertEquals(48L*1024*1024, NativeBridge.requestLimit("/model"));
+    assertEquals(Long.MAX_VALUE, NativeBridge.requestLimit("/model"));
     for(String route:new String[]{"/tool","/settings","/web-api","/model/"}) assertEquals(3L*1024*1024, NativeBridge.requestLimit(route));
   }
   @Test public void defaultMaxAndEveryEffortSurviveSettingsRecreation() throws Exception {
@@ -28,6 +28,12 @@ public class ReasoningSettingsTests {
       assertEquals("https://api.deepseek.com", settings.base());
       assertTrue(settings.webSearch());assertTrue(settings.webFetch());
       assertTrue(settings.autoImageModel());settings.saveAutoImageModel(false);assertFalse(new Settings(isolated).autoImageModel());settings.saveAutoImageModel(true);assertTrue(new Settings(isolated).autoImageModel());
+      assertFalse(settings.publicData().getBoolean("limitThinking"));
+      settings.saveThinkingLimit(true,45);
+      assertTrue(new Settings(isolated).publicData().getBoolean("limitThinking"));
+      assertEquals(45,new Settings(isolated).publicData().getInt("thinkingSeconds"));
+      settings.saveThinkingLimit(false,45);
+      assertFalse(new Settings(isolated).publicData().getBoolean("limitThinking"));
       assertEquals(32,settings.publicData().getInt("maxSteps"));
       assertEquals("",settings.apiKey());assertFalse(settings.publicData().getBoolean("hasKey"));
       for (String effort : new String[]{"low", "max", "none", "high", "none", "high"}) {

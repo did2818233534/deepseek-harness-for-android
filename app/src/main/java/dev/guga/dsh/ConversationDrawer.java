@@ -33,9 +33,13 @@ final class ConversationDrawer {
     panel.addView(scrollList, new LinearLayout.LayoutParams(-1, 0, 1));
     LinearLayout footer = activity.row();
     footer.setPadding(0, activity.dp(12), 0, 0);
-    Button create = activity.button(archived ? "返回对话" : "＋  新对话", v -> {
+    Button create = activity.button(archived ? "返回对话" : "新对话", v -> {
       drawer.dismiss(); if (archived) navigation(false); else activity.newChat();
     });
+    android.graphics.drawable.Drawable add = activity.getDrawable(R.drawable.ic_add).mutate();
+    add.setTint(Color.WHITE);add.setBounds(0,0,activity.dp(20),activity.dp(20));
+    create.setCompoundDrawablesRelative(add,null,null,null);
+    create.setCompoundDrawablePadding(activity.dp(8));
     create.setTextSize(16);
     create.setTextColor(Color.WHITE);
     create.setBackground(activity.shape(activity.accent, 26));

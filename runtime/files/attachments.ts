@@ -20,22 +20,30 @@ function imageMime(b: Buffer) {
 }
 export function prepareAttachments(workspace: string, input: any, model: string, allowTemporarySwitch = false) {
   if (input === undefined) return [];
-  if (!Array.isArray(input) || input.length > 8) throw Error('每条消息最多添加 8 个附件');
-  let total = 0;
+  if (!Array.isArray(input)) throw Error('附件列表格式无效');
   return input.map(a => {
     const file = attachmentPath(workspace, a?.path);
     const bytes = fs.statSync(file).size;
-    if (bytes > 16 * 1024 * 1024 || (total += bytes) > 32 * 1024 * 1024) throw Error('附件过大：单个最多 16 MB，总计最多 32 MB');
-    const data = fs.readFileSync(file), mime = imageMime(data);
+    const header=Buffer.alloc(12), fd=fs.openSync(file,'r');
+    try { fs.readSync(fd,header,0,12,0); } finally { fs.closeSync(fd); }
+    const mime=imageMime(header);
     if (String(a.mime || '').startsWith('image/') && a.mime !== 'image/svg+xml' && !mime) throw Error('图片格式不支持，请使用 PNG、JPEG、GIF 或 WebP');
     if (mime && !allowTemporarySwitch && !supportsImages(model)) throw Error('当前模型不支持图片，请切换到支持图片的 Flash 模型');
-    const hash = crypto.createHash('sha256').update(data).digest('hex');
+    const originalIdentity=fileIdentity(file);
+    if(!originalIdentity)throw Error('附件正在修改，请重新添加');
+    const hash=originalIdentity.sha256;
     // Immutable copies preserve prior turns when a working file is edited later.
     const dir = path.join(workspace, '.attachments');
     fs.mkdirSync(dir, {recursive:true});
     const stored = path.join(dir, hash);
-    if (!fs.existsSync(stored)) fs.writeFileSync(stored, data, {flag:'wx'});
-    const originalIdentity=fileIdentity(file);
+    if (!fs.existsSync(stored)) {
+      const temp=path.join(dir,'.tmp-'+crypto.randomUUID());
+      try {
+        fs.copyFileSync(file,temp);
+        if(fileIdentity(temp)?.sha256!==hash)throw Error('附件正在修改，请重新添加');
+        fs.renameSync(temp,stored);
+      } finally { fs.rmSync(temp,{force:true}); }
+    }
     return {fileIdentity:originalIdentity?.sha256===hash?originalIdentity:undefined,storedIdentity:fileIdentity(stored),path:a.path, name:String(a.name || path.basename(a.path)).slice(0,255), mime:mime || String(a.mime || 'application/octet-stream'), bytes, attachmentId:'sha256:'+hash, storedPath:'.attachments/'+hash, mediaType:mime};
   });
 }

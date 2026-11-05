@@ -66,7 +66,7 @@ final class MessageActions {
     if(host.busy){host.toast("请先停止当前任务");return;}
     if(selected.size()!=1){host.toast("请选择一条消息作为分支起点");return;}
     String key=selected.iterator().next();int slash=key.lastIndexOf('/');
-    try {host.request("/session/fork",new JSONObject().put("turnId",key.substring(0,slash)).put("includeAssistant",key.endsWith("/a")),()->{clear();host.revision=-1;host.currentId="";host.toast("已创建分支，原对话已保留");});}
+    try {host.request("/session/fork",new JSONObject().put("turnId",key.substring(0,slash)).put("includeAssistant",key.endsWith("/a")),()->{clear();host.revision=-1;host.currentId="";android.widget.Toast.makeText(host,"已创建分支",android.widget.Toast.LENGTH_SHORT).show();});}
     catch(Exception e){host.toast(e.getMessage());}
   }
   static String userSource(JSONObject turn){

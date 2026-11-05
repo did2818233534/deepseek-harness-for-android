@@ -274,6 +274,7 @@ public final class MainActivity extends Activity {
   LinearLayout row() {
     LinearLayout l = new LinearLayout(this);
     l.setOrientation(LinearLayout.HORIZONTAL);
+    l.setBaselineAligned(false);
     l.setGravity(Gravity.CENTER_VERTICAL);
     return l;
   }
@@ -547,7 +548,8 @@ public final class MainActivity extends Activity {
       historyStart=Math.max(0,turns.length()-HISTORY_BATCH);
     }else if(turns.length()<transcriptTurns.length())historyStart=Math.max(0,turns.length()-HISTORY_BATCH);
     transcriptTurns=turns;
-    chatTitle.setText((!state.optString("title").isEmpty()?state.optString("title"):turns.length()==0?"新对话":turns.optJSONObject(0).optString("userText","新对话"))+(state.optBoolean("isBranch")?" · 分支":""));
+    String title=(!state.optString("title").isEmpty()?state.optString("title"):turns.length()==0?"新对话":turns.optJSONObject(0).optString("userText","新对话"))+(state.optBoolean("isBranch")?" · 分支":"");
+    if(!title.contentEquals(chatTitle.getText())) chatTitle.setText(title);
     renderVisibleTurns();
     String error=state.optString("lastError");
     if(turnError==null) {turnError=label("",14,UiStyle.DANGER); turnError.setPadding(dp(14),dp(8),dp(14),dp(14));messages.addView(turnError);}
@@ -555,7 +557,19 @@ public final class MainActivity extends Activity {
     if(fileLibrary!=null && currentPage==fileLibrary.page && fileLibrary.selecting && !fileLibrary.deleting){fileLibrary.setSelecting(false);return;}
     if(messageActions.active())messageActions.updateForkEnabled();
     if(turns.length()==0&&!busy) scroll.post(() -> scroll.scrollTo(0,0));
-    else if((atBottom||changed)&&!historyLoading){int generation=historyGeneration;scroll.post(() -> {if(generation==historyGeneration&&!historyLoading)scroll.scrollTo(0,Math.max(0,messages.getHeight()-scroll.getHeight()));});}
+    else if ((atBottom || changed) && !historyLoading) {
+      int generation = historyGeneration;
+      android.view.ViewTreeObserver.OnPreDrawListener listener = new android.view.ViewTreeObserver.OnPreDrawListener() {
+        public boolean onPreDraw() {
+          scroll.getViewTreeObserver().removeOnPreDrawListener(this);
+          if (generation == historyGeneration && !historyLoading)
+            scroll.scrollTo(0, Math.max(0, messages.getHeight() - scroll.getHeight()));
+          return true;
+        }
+      };
+      scroll.getViewTreeObserver().addOnPreDrawListener(listener);
+      scroll.invalidate();
+    }
   }
 
   void renderVisibleTurns(){
@@ -707,7 +721,10 @@ public final class MainActivity extends Activity {
   }
   LinearLayout helpTitle(String title, int size, int color, String detail) {
     LinearLayout heading=row();
+    heading.setBaselineAligned(false);
     TextView text=label(title,size,color);
+    text.setIncludeFontPadding(false);
+    text.setGravity(Gravity.CENTER_VERTICAL);
     heading.addView(text,new LinearLayout.LayoutParams(0,-2,1));
     if(!detail.isEmpty()) {
       ImageButton help=icon(R.drawable.ic_help,title+"说明",v -> {
@@ -725,6 +742,7 @@ public final class MainActivity extends Activity {
   void settingEntry(LinearLayout body, int glyph, String title, String detail,
       boolean first, boolean last, View.OnClickListener click) {
     LinearLayout entry = row();
+    entry.setBaselineAligned(false);
     entry.setPadding(dp(16), dp(8), dp(16), dp(8));
     entry.setMinimumHeight(dp(64));
     GradientDrawable surface = shape(0xFFECE6F0, 4);
@@ -742,9 +760,13 @@ public final class MainActivity extends Activity {
     iconParams.rightMargin = dp(20);
     entry.addView(symbol, iconParams);
     entry.addView(helpTitle(title,18,ink,detail), new LinearLayout.LayoutParams(0, -2, 1));
-    TextView arrow = label("›", 24, muted);
-    arrow.setGravity(Gravity.CENTER);
-    entry.addView(arrow,new LinearLayout.LayoutParams(dp(SETTINGS_ACTION_DP),-2));
+    ImageView arrow = new ImageView(this);
+    arrow.setImageResource(R.drawable.ic_chevron_down);
+    arrow.setImageTintList(android.content.res.ColorStateList.valueOf(muted));
+    arrow.setRotation(-90);
+    arrow.setScaleType(ImageView.ScaleType.CENTER);
+    arrow.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+    entry.addView(arrow,new LinearLayout.LayoutParams(dp(SETTINGS_ACTION_DP),dp(48)));
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
     lp.bottomMargin = dp(4);
     body.addView(entry, lp);
@@ -918,7 +940,6 @@ public final class MainActivity extends Activity {
   Intent imagePickerIntent() { return GalleryPicker.preferred(this); }
   void importImage() {
     attachmentPickerGeneration=attachments.generation;
-    if(attachments.pending.size()>=8){toast("每条消息最多添加 8 个附件");return;}
     Intent[] candidates={imagePickerIntent(),GalleryPicker.fallback(8-attachments.pending.size()),GalleryPicker.documentRequest()};
     for(Intent candidate:candidates){
       try{startActivityForResult(candidate,IMPORT_IMAGE);return;}
@@ -970,7 +991,6 @@ public final class MainActivity extends Activity {
       ArrayList<Uri> uris=new ArrayList<>();
       if(data.getClipData()!=null)for(int n=0;n<data.getClipData().getItemCount();n++)uris.add(data.getClipData().getItemAt(n).getUri());
       else if(data.getData()!=null)uris.add(data.getData());
-      if(uris.size()+attachments.pending.size()>8){toast("每条消息最多添加 8 个附件");return;}
       attachments.importUris(uris);return;
     }
     if(data.getData()==null)return;
@@ -986,7 +1006,7 @@ public final class MainActivity extends Activity {
             OutputStream out = getContentResolver().openOutputStream(uri, "wt")
           ) {
             if (out == null) throw new IOException("无法打开导出位置");
-            FileTools.copy(in, out, FileTools.MAX_BYTES);
+            FileTools.copy(in, out, Long.MAX_VALUE);
           }
           runOnUiThread(() ->
             Toast.makeText(this, "文件已导出", Toast.LENGTH_SHORT).show()

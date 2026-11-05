@@ -69,12 +69,23 @@ final class ChatTurnView extends LinearLayout {
 
   TextView bubble(boolean mine) {
     TextView view=host.label("",16,host.ink); view.setTextIsSelectable(false);
+    view.setBreakStrategy(android.text.Layout.BREAK_STRATEGY_SIMPLE);
+    view.setHyphenationFrequency(android.text.Layout.HYPHENATION_FREQUENCY_NONE);
     view.setLineSpacing(host.dp(3),1); view.setPadding(host.dp(14),host.dp(12),host.dp(14),host.dp(12));
     view.setMaxWidth(Math.max(host.dp(96),(int)(host.getResources().getDisplayMetrics().widthPixels*.82f)-host.dp(32)));
     view.setBackground(host.ui.bubble(mine ? 0xFFE8DEF8 : UiStyle.LOW,mine)); return view;
   }
   LayoutParams bubbleParams(boolean mine) {
     LayoutParams p=new LayoutParams(-2,-2); p.gravity=mine?Gravity.END:Gravity.START; p.bottomMargin=host.dp(14); return p;
+  }
+  static void updateStreamText(TextView view, String value) {
+    CharSequence previous = view.getText();
+    if (value.contentEquals(previous)) return;
+    if (previous instanceof android.text.Editable && value.startsWith(previous.toString())) {
+      ((android.text.Editable) previous).append(value, previous.length(), value.length());
+    } else {
+      view.setText(value, TextView.BufferType.EDITABLE);
+    }
   }
   static void text(TextView view,String value) {
     if(!value.contentEquals(view.getText())) view.setText(value);
@@ -96,8 +107,7 @@ final class ChatTurnView extends LinearLayout {
     attachmentRow.setVisibility(attachmentRow.getChildCount()>0?VISIBLE:GONE);
     text(user,turn.optString("userText"));
     String reply=turn.optString("text");
-    boolean inline=svgContent.update(reply);
-    if(inline){markdown.source=reply;answer.setVisibility(GONE);}else markdown.update(answer,reply);
+    streamReply(reply,turn.optBoolean("busy"));
     JSONArray generated=ArtifactViews.collect(turn);String generatedKey=generated.toString();
     if(!generatedKey.equals(outputKey)){outputKey=generatedKey;ArtifactViews.fill(this,generated);}
     String thought=turn.optString("reasoning"); JSONArray tools=turn.optJSONArray("tools");
@@ -106,7 +116,8 @@ final class ChatTurnView extends LinearLayout {
     process.setVisibility(hasProcess?VISIBLE:GONE);progress.setVisibility(active?VISIBLE:GONE);
     if(!initialized || active!=wasActive) expanded=active;
     initialized=true; wasActive=active;
-    text(reasoning,thought);
+    updateStreamText(reasoning,thought);
+    reasoning.setVisibility(thought.isEmpty()?GONE:VISIBLE);
     StringBuilder summary=new StringBuilder(); String running="";
     if(tools!=null) for(int n=0;n<tools.length();n++) {
       JSONObject tool=tools.optJSONObject(n); if(tool==null) continue;
@@ -124,6 +135,47 @@ final class ChatTurnView extends LinearLayout {
     if(elapsed>0) label+=" · "+duration(elapsed);
     if(!label.contentEquals(caption.getText()))caption.setText(label); showExpansion();
     waiting.setVisibility(turn.optBoolean("busy")&&!hasProcess&&turn.optString("text").isEmpty()?VISIBLE:GONE);
+  }
+  // Keep just the newest snapshot. Smooth small bursts of prose in two frames;
+  // render structured changes and terminal snapshots immediately.
+  String pendingReply;
+  final Runnable finishReply = () -> {
+    String latest = pendingReply;
+    pendingReply = null;
+    if (latest != null) renderReply(latest);
+  };
+
+  void streamReply(String reply, boolean busy) {
+    if (busy && reply.equals(pendingReply)) return;
+    if (pendingReply != null) {
+      removeCallbacks(finishReply);
+      pendingReply = null;
+    }
+    String shown = markdown.source;
+    if (busy && isShown() && isAttachedToWindow() && shown != null && reply.startsWith(shown)) {
+      int added = reply.length() - shown.length();
+      if (added >= 6 && added <= 160 && reply.substring(shown.length()).codePoints()
+          .allMatch(c -> Character.isLetterOrDigit(c) || c == ' ')) {
+        int middle = shown.length() + added / 2;
+        if (Character.isLowSurrogate(reply.charAt(middle))) middle++;
+        renderReply(reply.substring(0, middle));
+        pendingReply = reply;
+        postOnAnimationDelayed(finishReply, 32);
+        return;
+      }
+    }
+    renderReply(reply);
+  }
+
+  @Override protected void onDetachedFromWindow() {
+    removeCallbacks(finishReply);
+    finishReply.run();
+    super.onDetachedFromWindow();
+  }
+
+  void renderReply(String reply) {
+    boolean inline=svgContent.update(reply);
+    if(inline){markdown.source=reply;answer.setVisibility(GONE);}else markdown.update(answer,reply);
   }
   String attachmentSummary(){
     StringBuilder out=new StringBuilder();try{JSONArray a=new JSONArray(attachmentKey.isEmpty()?"[]":attachmentKey);for(int n=0;n<a.length();n++)out.append("\n附件：").append(a.getJSONObject(n).optString("name"));}catch(Exception ignored){}return out.toString();

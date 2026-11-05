@@ -5,7 +5,11 @@ import crypto from 'node:crypto';
 export function fileIdentity(file:string){
   const before=fs.lstatSync(file);
   if(!before.isFile()||before.isSymbolicLink())return undefined;
-  const sha256=crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+  const hash=crypto.createHash('sha256'), buffer=Buffer.allocUnsafe(65536);
+  const fd=fs.openSync(file,'r');
+  try { let size; while((size=fs.readSync(fd,buffer,0,buffer.length,null))>0) hash.update(buffer.subarray(0,size)); }
+  finally { fs.closeSync(fd); }
+  const sha256=hash.digest('hex');
   const after=fs.lstatSync(file);
   const stamp=(s:any)=>[s.dev,s.ino,s.size,s.mtimeMs,s.ctimeMs,s.birthtimeMs].join(':');
   if(stamp(before)!==stamp(after))return undefined;

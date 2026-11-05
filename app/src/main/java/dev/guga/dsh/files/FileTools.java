@@ -69,7 +69,7 @@ public final class FileTools {
     File f = timestamped(resolve(name));
     File tmp = File.createTempFile(".dsh-import-", ".tmp", root);
     try (FileOutputStream out = new FileOutputStream(tmp)) {
-      copy(input, out, MAX_BYTES);
+      copy(input, out, Long.MAX_VALUE);
       out.getFD().sync();
     } catch (Exception e) {
       tmp.delete();
@@ -84,11 +84,11 @@ public final class FileTools {
     return out.toByteArray();
   }
 
-  public static void copy(InputStream in, OutputStream out, int max)
+  public static void copy(InputStream in, OutputStream out, long max)
     throws IOException {
     byte[] b = new byte[8192];
-    int n,
-      total = 0;
+    int n;
+    long total = 0;
     while ((n = in.read(b)) != -1) {
       total += n;
       if (total > max) throw new IOException(

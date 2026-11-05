@@ -39,7 +39,7 @@ final class IncomingConversationPicker {
    LinearLayout row=host.row();row.setPadding(host.dp(4),host.dp(8),host.dp(4),host.dp(8));row.setContentDescription(title);row.setOnClickListener(v->{selected=id;render();});
    TextView avatar=host.label(title.isEmpty()?"聊":title.substring(0,1),18,host.accent);avatar.setGravity(android.view.Gravity.CENTER);avatar.setBackground(host.shape(UiStyle.SURFACE,10));row.addView(avatar,new LinearLayout.LayoutParams(host.dp(40),host.dp(40)));
    TextView name=host.label(title,16,host.ink);name.setSingleLine();name.setEllipsize(android.text.TextUtils.TruncateAt.END);name.setPadding(host.dp(12),0,host.dp(8),0);row.addView(name,new LinearLayout.LayoutParams(0,-2,1));
-   TextView tick=host.label(id.equals(selected)?"✓":"",20,host.accent);row.addView(tick,new LinearLayout.LayoutParams(host.dp(24),-2));list.addView(row,new LinearLayout.LayoutParams(-1,-2));
+   ImageView tick=new ImageView(host);tick.setImageResource(R.drawable.ic_check);tick.setImageTintList(android.content.res.ColorStateList.valueOf(host.accent));tick.setVisibility(id.equals(selected)?View.VISIBLE:View.INVISIBLE);row.addView(tick,new LinearLayout.LayoutParams(host.dp(24),host.dp(24)));list.addView(row,new LinearLayout.LayoutParams(-1,-2));
 
   }
   status.setText(selected!=null?(selected.isEmpty()?"已选择：新对话":"已选择："+selectedTitle()):loading?"正在加载对话…":count==0?"没有找到对话，可新建对话":"请选择对话");confirm.setEnabled(selected!=null);
@@ -63,10 +63,7 @@ final class IncomingConversationPicker {
     if(host.isDestroyed())return;
     if(switching){host.attachments.reset();host.input.setText("");}
     dialog.dismiss();host.returnToChat();host.revision=-1;host.render(state);
-    int available=8-host.attachments.pending.size()-host.attachments.importing;
-    if(available<=0){host.toast("请先处理输入框中已有的附件");return;}
-    if(files.size()>available)host.toast("每条消息最多添加 8 个附件，其余文件请分批打开");
-    host.attachments.importUris(files.subList(0,Math.min(available,files.size())));
+    host.attachments.importUris(files);
    });
   }catch(Exception e){host.runOnUiThread(()->{working=false;dialog.setCancelable(true);confirm.setEnabled(true);confirm.setText("重试添加");status.setText("无法打开对话，请重试");});}});
  }

@@ -103,6 +103,10 @@ public final class Settings {
     return prefs.getString("model", defaults.getString(R.string.default_model));
   }
 
+  public void saveThinkingLimit(boolean enabled,int seconds) {
+    prefs.edit().putBoolean("limitThinking",enabled).putInt("thinkingSeconds",seconds).apply();
+  }
+
   public String reasoningEffort() {
     String value = prefs.getString("reasoningEffort", defaults.getString(R.string.default_reasoning_effort));
     return ("none".equals(value) || "low".equals(value) || "high".equals(value) || "max".equals(value)) ? value : defaults.getString(R.string.default_reasoning_effort);
@@ -139,6 +143,7 @@ public final class Settings {
       .put("hasKey", !apiKey().isEmpty())
       .put("thinking", !"none".equals(reasoningEffort()))
       .put("reasoningEffort", reasoningEffort())
+      .put("limitThinking",prefs.getBoolean("limitThinking",false)).put("thinkingSeconds",prefs.getInt("thinkingSeconds",30))
       .put("maxSteps", prefs.getInt("steps", defaults.getInteger(R.integer.default_max_steps)));
   }
 }

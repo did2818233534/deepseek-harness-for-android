@@ -42,11 +42,11 @@ final class SvgMessageContent extends LinearLayout {
       Part p=next.get(n);boolean reuse=n<rendered.size()&&rendered.get(n).svg==p.svg&&rendered.get(n).code==p.code&&(!p.svg||rendered.get(n).text.equals(p.text));
       if(!reuse){while(getChildCount()>n)removeViewAt(n);while(rendered.size()>n)rendered.remove(n);
         View child=p.svg?new Card(p.text):p.code?new CodeCard():owner.bubble(false);
-        if(!p.svg&&!p.code){TextView text=(TextView)child;text.setBackground(null);ChatMarkdown.links(text,host);text.setOnClickListener(v->{if(host.messageActions.active())select();else MessagePreview.open(host,owner.markdown.source);});text.setOnLongClickListener(v->{select();return true;});}
+        if(!p.svg&&!p.code){TextView text=(TextView)child;text.setBackground(null);text.setTag(new ChatMarkdown(host));ChatMarkdown.links(text,host);text.setOnClickListener(v->{if(host.messageActions.active())select();else MessagePreview.open(host,owner.markdown.source);});text.setOnLongClickListener(v->{select();return true;});}
         LayoutParams lp=new LayoutParams(-2,-2);lp.bottomMargin=0;addView(child,lp);rendered.add(p);
       }
       if(p.code)((CodeCard)getChildAt(n)).update(p.raw);
-      if(!p.svg&&!p.code&&!p.text.equals(getChildAt(n).getTag())){TextView text=(TextView)getChildAt(n);new ChatMarkdown(host).update(text,p.text);text.setTag(p.text);}
+      if(!p.svg&&!p.code){TextView text=(TextView)getChildAt(n);((ChatMarkdown)text.getTag()).update(text,p.text);}
       rendered.set(n,p);
     }
     while(getChildCount()>next.size())removeViewAt(next.size());while(rendered.size()>next.size())rendered.remove(next.size());return true;
@@ -65,7 +65,7 @@ final class SvgMessageContent extends LinearLayout {
       text.setOnClickListener(v->{if(host.messageActions.active())select();else MessagePreview.open(host,owner.markdown.source);});text.setOnLongClickListener(v->{select();return true;});
     }
     @Override protected void onDetachedFromWindow(){copy.removeCallbacks(resetCopy);resetCopy.run();super.onDetachedFromWindow();}
-    void update(String value){if(!raw.equals(value)){raw=value;text.setText(value);}}
+    void update(String value){if(!raw.equals(value)){raw=value;ChatTurnView.updateStreamText(text,value);}}
   }
   final class Card extends FrameLayout {
     final String source;final InlineSvgView preview;

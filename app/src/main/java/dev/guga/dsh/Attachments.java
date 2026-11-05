@@ -26,17 +26,15 @@ final class Attachments {
   }
   void reset(){generation++;pending.clear();render();}
   JSONArray snapshot(){return new JSONArray(pending);}
-  void restore(String value){try{JSONArray a=new JSONArray(value);for(int n=0;n<Math.min(8,a.length());n++)pending.add(a.getJSONObject(n));}catch(Exception ignored){}render();}
+  void restore(String value){try{JSONArray a=new JSONArray(value);for(int n=0;n<a.length();n++)pending.add(a.getJSONObject(n));}catch(Exception ignored){}render();}
   void clearSent(JSONArray sent){for(int n=0;n<sent.length();n++){String path=sent.optJSONObject(n).optString("path");pending.removeIf(a->a.optString("path").equals(path));}render();}
   void add(JSONObject item) {
     for(JSONObject old:pending)if(old.optString("path").equals(item.optString("path")))return;
-    long total=item.optLong("bytes");for(JSONObject old:pending)total+=old.optLong("bytes");
-    if(pending.size()>=8||total>32L*1024*1024){host.toast("每条消息最多添加 8 个附件，总大小不超过 32 MB");return;}
     pending.add(item);render();
   }
   void render(){row.removeAllViews();tray.setVisibility(pending.isEmpty()?View.GONE:View.VISIBLE);for(JSONObject item:pending)row.addView(card(host,item,()->{pending.remove(item);render();},null,null));}
   static JSONObject describe(FileTools tools,String path,String suggestedMime)throws Exception {
-    File f=tools.resolve(path);if(!f.isFile()||f.length()>FileTools.MAX_BYTES)throw new IOException("附件不存在或超过 16 MB");
+    File f=tools.resolve(path);if(!f.isFile())throw new IOException("附件不存在");
     BitmapFactory.Options bounds=new BitmapFactory.Options();bounds.inJustDecodeBounds=true;BitmapFactory.decodeFile(f.getPath(),bounds);
     String mime=bounds.outMimeType;
     if(mime==null){mime=suggestedMime;if(mime==null||mime.isEmpty()){String ext=android.webkit.MimeTypeMap.getFileExtensionFromUrl(f.getName().replace(" ","_"));mime=android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext.toLowerCase(Locale.ROOT));}}

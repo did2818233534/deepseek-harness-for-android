@@ -18348,7 +18348,16 @@ var import_node_crypto = __toESM(require("node:crypto"));
 function fileIdentity(file2) {
   const before = import_node_fs.default.lstatSync(file2);
   if (!before.isFile() || before.isSymbolicLink()) return void 0;
-  const sha256 = import_node_crypto.default.createHash("sha256").update(import_node_fs.default.readFileSync(file2)).digest("hex");
+  const hash2 = import_node_crypto.default.createHash("sha256"),
+    buffer = Buffer.allocUnsafe(65536);
+  const fd = import_node_fs.default.openSync(file2, "r");
+  try {
+    let size;
+    while ((size = import_node_fs.default.readSync(fd, buffer, 0, buffer.length, null)) > 0) hash2.update(buffer.subarray(0, size));
+  } finally {
+    import_node_fs.default.closeSync(fd);
+  }
+  const sha256 = hash2.digest("hex");
   const after = import_node_fs.default.lstatSync(file2);
   const stamp = s => [s.dev, s.ino, s.size, s.mtimeMs, s.ctimeMs, s.birthtimeMs].join(":");
   if (stamp(before) !== stamp(after)) return void 0;
@@ -18902,26 +18911,40 @@ function imageMime(b) {
 }
 function prepareAttachments(workspace, input, model, allowTemporarySwitch = false) {
   if (input === void 0) return [];
-  if (!Array.isArray(input) || input.length > 8) throw Error("\u6BCF\u6761\u6D88\u606F\u6700\u591A\u6DFB\u52A0 8 \u4E2A\u9644\u4EF6");
-  let total = 0;
+  if (!Array.isArray(input)) throw Error("\u9644\u4EF6\u5217\u8868\u683C\u5F0F\u65E0\u6548");
   return input.map(a => {
     const file2 = attachmentPath(workspace, a?.path);
     const bytes = import_node_fs5.default.statSync(file2).size;
-    if (bytes > 16 * 1024 * 1024 || (total += bytes) > 32 * 1024 * 1024) throw Error("\u9644\u4EF6\u8FC7\u5927\uFF1A\u5355\u4E2A\u6700\u591A 16 MB\uFF0C\u603B\u8BA1\u6700\u591A 32 MB");
-    const data = import_node_fs5.default.readFileSync(file2),
-      mime = imageMime(data);
+    const header = Buffer.alloc(12),
+      fd = import_node_fs5.default.openSync(file2, "r");
+    try {
+      import_node_fs5.default.readSync(fd, header, 0, 12, 0);
+    } finally {
+      import_node_fs5.default.closeSync(fd);
+    }
+    const mime = imageMime(header);
     if (String(a.mime || "").startsWith("image/") && a.mime !== "image/svg+xml" && !mime) throw Error("\u56FE\u7247\u683C\u5F0F\u4E0D\u652F\u6301\uFF0C\u8BF7\u4F7F\u7528 PNG\u3001JPEG\u3001GIF \u6216 WebP");
     if (mime && !allowTemporarySwitch && !supportsImages(model)) throw Error("\u5F53\u524D\u6A21\u578B\u4E0D\u652F\u6301\u56FE\u7247\uFF0C\u8BF7\u5207\u6362\u5230\u652F\u6301\u56FE\u7247\u7684 Flash \u6A21\u578B");
-    const hash2 = import_node_crypto5.default.createHash("sha256").update(data).digest("hex");
+    const originalIdentity = fileIdentity(file2);
+    if (!originalIdentity) throw Error("\u9644\u4EF6\u6B63\u5728\u4FEE\u6539\uFF0C\u8BF7\u91CD\u65B0\u6DFB\u52A0");
+    const hash2 = originalIdentity.sha256;
     const dir = import_node_path4.default.join(workspace, ".attachments");
     import_node_fs5.default.mkdirSync(dir, {
       recursive: true
     });
     const stored = import_node_path4.default.join(dir, hash2);
-    if (!import_node_fs5.default.existsSync(stored)) import_node_fs5.default.writeFileSync(stored, data, {
-      flag: "wx"
-    });
-    const originalIdentity = fileIdentity(file2);
+    if (!import_node_fs5.default.existsSync(stored)) {
+      const temp = import_node_path4.default.join(dir, ".tmp-" + import_node_crypto5.default.randomUUID());
+      try {
+        import_node_fs5.default.copyFileSync(file2, temp);
+        if (fileIdentity(temp)?.sha256 !== hash2) throw Error("\u9644\u4EF6\u6B63\u5728\u4FEE\u6539\uFF0C\u8BF7\u91CD\u65B0\u6DFB\u52A0");
+        import_node_fs5.default.renameSync(temp, stored);
+      } finally {
+        import_node_fs5.default.rmSync(temp, {
+          force: true
+        });
+      }
+    }
     return {
       fileIdentity: originalIdentity?.sha256 === hash2 ? originalIdentity : void 0,
       storedIdentity: fileIdentity(stored),
@@ -52108,7 +52131,7 @@ var DeepSeekFetchApiProvider = class {
 var import_node_http = __toESM(require("node:http"));
 var import_node_fs7 = __toESM(require("node:fs"));
 var import_node_path7 = __toESM(require("node:path"));
-var import_node_crypto8 = __toESM(require("node:crypto"));
+var import_node_crypto9 = __toESM(require("node:crypto"));
 var import_node_async_hooks2 = require("node:async_hooks");
 
 // runtime/sessions/storage.ts
@@ -52308,6 +52331,7 @@ var AndroidSessions = class _AndroidSessions extends SessionPersistence {
 };
 
 // runtime/providers/adapter.ts
+var import_node_crypto8 = __toESM(require("node:crypto"));
 var import_node_string_decoder = require("node:string_decoder");
 var AndroidAdapter = class extends LlmAdapter {
   constructor(bridge2, settings2, workspace) {
@@ -52334,25 +52358,107 @@ var AndroidAdapter = class extends LlmAdapter {
       defaultMaxTokens: effort === "none" ? 8192 : effort === "max" ? 131072 : 65536
     };
   }
+  thinkingBudgets = /* @__PURE__ */new WeakMap();
   async *stream(options) {
+    const settings2 = this.settings();
+    if (!settings2.limitThinking || settings2.reasoningEffort === "none" || options.purpose === "session-title" || options.purpose === "compaction") {
+      yield* this.requestStream(options, false);
+      return;
+    }
+    let budget = this.thinkingBudgets.get(settings2);
+    if (!budget) {
+      budget = {
+        remaining: Math.max(1, Number(settings2.thinkingSeconds) || 30) * 1e3,
+        fast: false
+      };
+      this.thinkingBudgets.set(settings2, budget);
+    }
+    if (budget.fast) {
+      yield* this.requestStream(options, true);
+      return;
+    }
+    const controller = new AbortController();
+    const abort = () => controller.abort(options.signal?.reason);
+    options.signal?.addEventListener("abort", abort, {
+      once: true
+    });
+    if (options.signal?.aborted) abort();
+    let timer,
+      startedAt = 0,
+      expired = false,
+      committed = false,
+      thought = "";
+    const stopTimer = () => {
+      clearTimeout(timer);
+      if (startedAt) {
+        budget.remaining = Math.max(0, budget.remaining - (performance.now() - startedAt));
+        startedAt = 0;
+      }
+    };
+    try {
+      for await (const chunk of this.requestStream({
+        ...options,
+        signal: controller.signal
+      }, false)) {
+        if (chunk.type === "reasoning-delta") {
+          thought += chunk.text;
+          if (!startedAt && !committed) {
+            startedAt = performance.now();
+            timer = setTimeout(() => {
+              expired = true;
+              controller.abort(new Error("Thinking deadline"));
+            }, budget.remaining);
+          }
+        }
+        if (chunk.type === "text-delta" || chunk.type === "tool-call-delta") {
+          committed = true;
+          stopTimer();
+        }
+        yield chunk;
+      }
+    } catch (error51) {
+      options.signal?.throwIfAborted();
+      if (!expired) throw error51;
+    } finally {
+      stopTimer();
+      options.signal?.removeEventListener("abort", abort);
+    }
+    if (expired) {
+      options.signal?.throwIfAborted();
+      budget.fast = true;
+      if (thought) yield {
+        type: "block-end",
+        index: 0,
+        block: {
+          type: "reasoning",
+          text: thought
+        }
+      };
+      for await (const chunk of this.requestStream(options, true)) yield "index" in chunk ? {
+        ...chunk,
+        index: chunk.index + 100
+      } : chunk;
+    }
+  }
+  async *requestStream(options, fast) {
     const omitImages = !supportsImages(options.model, this.settings().models);
     const messages = options.messages.map(m => {
-      const text3 = m.content.filter(b => b.type === "text").map(b => b.text).join("\n");
+      const text2 = m.content.filter(b => b.type === "text").map(b => b.text).join("\n");
       if (m.role === "tool") return {
         role: "tool",
         tool_call_id: m.toolCallId,
-        content: text3
+        content: text2
       };
       const out = {
         role: m.role === "developer" ? "system" : m.role,
         content: !omitImages && m.content.some(b => b.type === "image") ? m.content.flatMap(b => b.type === "text" ? [{
           type: "text",
           text: b.text
-        }] : b.type === "image" ? [attachmentImage(this.workspace, b.attachment)] : []) : text3 || (omitImages && m.content.some(b => b.type === "image") ? "[\u6B64\u524D\u53D1\u9001\u7684\u56FE\u7247\uFF0C\u672C\u8F6E\u672A\u9644\u5E26]" : "")
+        }] : b.type === "image" ? [attachmentImage(this.workspace, b.attachment)] : []) : text2 || (omitImages && m.content.some(b => b.type === "image") ? "[\u6B64\u524D\u53D1\u9001\u7684\u56FE\u7247\uFF0C\u672C\u8F6E\u672A\u9644\u5E26]" : "")
       };
       if (m.role === "assistant") {
-        const calls2 = m.content.filter(b => b.type === "tool-call");
-        if (calls2.length) out.tool_calls = calls2.map(b => ({
+        const calls = m.content.filter(b => b.type === "tool-call");
+        if (calls.length) out.tool_calls = calls.map(b => ({
           id: b.id,
           type: "function",
           function: {
@@ -52360,8 +52466,8 @@ var AndroidAdapter = class extends LlmAdapter {
             arguments: b.arguments
           }
         }));
-        const reasoning2 = m.content.filter(b => b.type === "reasoning").map(b => b.text).join("");
-        if (reasoning2) out.reasoning_content = reasoning2;
+        const reasoning = m.content.filter(b => b.type === "reasoning").map(b => b.text).join("");
+        if (reasoning) out.reasoning_content = reasoning;
       }
       return out;
     });
@@ -52383,153 +52489,171 @@ var AndroidAdapter = class extends LlmAdapter {
       type: "function",
       function: t
     }));
-    const configuredEffort = options.purpose === "session-title" ? "none" : this.settings().reasoningEffort;
+    if (fast) messages.push({
+      role: "user",
+      content: "\u8BF7\u6839\u636E\u539F\u95EE\u9898\u53CA\u5DF2\u7ECF\u53D6\u5F97\u7684\u5DE5\u5177\u7ED3\u679C\u76F4\u63A5\u7ED9\u51FA\u56DE\u7B54\uFF1B\u8D44\u6599\u4E0D\u8DB3\u65F6\u8BF7\u660E\u786E\u8BF4\u660E\uFF0C\u907F\u514D\u91CD\u590D\u6267\u884C\u5DF2\u7ECF\u5B8C\u6210\u7684\u64CD\u4F5C\u3002"
+    });
+    const configuredEffort = fast || options.purpose === "session-title" ? "none" : this.settings().reasoningEffort;
     const effort = ["none", "low", "high", "max"].includes(configuredEffort) ? configuredEffort : "high";
     body.thinking = {
       type: effort === "none" ? "disabled" : "enabled"
     };
     if (effort !== "none") body.reasoning_effort = effort;
-    if (Buffer.byteLength(JSON.stringify(body), "utf8") > 48 * 1024 * 1024) throw Error("\u5F53\u524D\u5BF9\u8BDD\u7684\u56FE\u7247\u603B\u91CF\u8FC7\u5927\uFF0C\u8BF7\u65B0\u5EFA\u5BF9\u8BDD\u6216\u51CF\u5C11\u56FE\u7247\u540E\u91CD\u8BD5");
-    let response;
-    try {
-      response = await this.bridge("/model", body, options.signal, true);
-    } catch (error51) {
-      if (isContextWindowExceededError(error51 instanceof Error ? error51.message : String(error51))) throw new HarnessError("\u6A21\u578B\u4E0A\u4E0B\u6587\u5DF2\u6EE1", "CONTEXT_WINDOW_EXCEEDED", {
-        cause: error51
-      });
-      throw error51;
-    }
-    if (!response.body) throw Error("Model returned no stream");
-    const decoder = new import_node_string_decoder.StringDecoder("utf8");
-    let pending = "",
-      text2 = "",
-      reasoning = "",
-      finish = "",
-      usage;
-    const calls = /* @__PURE__ */new Map();
-    let sawDone = false;
-    const started = /* @__PURE__ */new Set();
-    const begin = (index, blockType) => {
-      if (started.has(index)) return [];
-      started.add(index);
-      return [{
-        type: "block-start",
-        index,
-        blockType
-      }];
+    const requestId = import_node_crypto8.default.randomUUID();
+    body.androidRequestId = requestId;
+    const cancel = () => {
+      void this.bridge("/cancel-model", {
+        androidRequestId: requestId
+      }).catch(() => {});
     };
-    for await (const raw of response.body) {
-      pending += decoder.write(Buffer.from(raw));
-      let pos;
-      while ((pos = pending.indexOf("\n")) >= 0) {
-        const line = pending.slice(0, pos).trim();
-        pending = pending.slice(pos + 1);
-        if (!line.startsWith("data:")) continue;
-        const data = line.slice(5).trim();
-        if (data === "[DONE]") {
-          sawDone = true;
-          continue;
-        }
-        if (!data) continue;
-        const chunk = JSON.parse(data);
-        if (chunk.error) {
-          const detail = JSON.stringify(chunk.error);
-          if (isContextWindowExceededError(detail)) throw new HarnessError("\u6A21\u578B\u4E0A\u4E0B\u6587\u5DF2\u6EE1", "CONTEXT_WINDOW_EXCEEDED");
-          throw Error(chunk.error.message || "Model error");
-        }
-        if (chunk.usage) usage = chunk.usage;
-        const c = chunk.choices?.[0];
-        if (!c) continue;
-        const d = c.delta || {};
-        if (d.reasoning_content) {
-          for (const b of begin(0, "reasoning")) yield b;
-          reasoning += d.reasoning_content;
-          yield {
-            type: "reasoning-delta",
-            index: 0,
-            text: d.reasoning_content
-          };
-        }
-        if (d.content) {
-          for (const b of begin(1, "text")) yield b;
-          text2 += d.content;
-          yield {
-            type: "text-delta",
-            index: 1,
-            text: d.content
-          };
-        }
-        for (const t of d.tool_calls || []) {
-          const index = 2 + t.index;
-          for (const b of begin(index, "tool-call")) yield b;
-          const current = calls.get(index) || {
-            id: "",
-            name: "",
-            arguments: ""
-          };
-          if (t.id) current.id = t.id;
-          if (t.function?.name) current.name += t.function.name;
-          current.arguments += t.function?.arguments || "";
-          calls.set(index, current);
-          yield {
-            type: "tool-call-delta",
-            index,
-            id: ToolCallId(current.id),
-            ...(t.function?.name ? {
-              name: t.function.name
-            } : {}),
-            argumentsDelta: t.function?.arguments || ""
-          };
-        }
-        if (c.finish_reason) finish = c.finish_reason;
-      }
-    }
     options.signal?.throwIfAborted();
-    if (!finish) throw Error("\u6A21\u578B\u8FDE\u63A5\u63D0\u524D\u7ED3\u675F\uFF0C\u8BF7\u91CD\u8BD5\uFF1B\u672A\u6267\u884C\u4E0D\u5B8C\u6574\u7684\u5DE5\u5177\u8C03\u7528\u3002");
-    if (started.has(0)) yield {
-      type: "block-end",
-      index: 0,
-      block: {
-        type: "reasoning",
-        text: reasoning
+    options.signal?.addEventListener("abort", cancel, {
+      once: true
+    });
+    try {
+      let response;
+      try {
+        response = await this.bridge("/model", body, options.signal, true);
+      } catch (error51) {
+        if (isContextWindowExceededError(error51 instanceof Error ? error51.message : String(error51))) throw new HarnessError("\u6A21\u578B\u4E0A\u4E0B\u6587\u5DF2\u6EE1", "CONTEXT_WINDOW_EXCEEDED", {
+          cause: error51
+        });
+        throw error51;
       }
-    };
-    if (started.has(1)) yield {
-      type: "block-end",
-      index: 1,
-      block: {
-        type: "text",
-        text: text2
+      if (!response.body) throw Error("Model returned no stream");
+      const decoder = new import_node_string_decoder.StringDecoder("utf8");
+      let pending = "",
+        text2 = "",
+        reasoning = "",
+        finish = "",
+        usage;
+      const calls = /* @__PURE__ */new Map();
+      let sawDone = false;
+      const started = /* @__PURE__ */new Set();
+      const begin = (index, blockType) => {
+        if (started.has(index)) return [];
+        started.add(index);
+        return [{
+          type: "block-start",
+          index,
+          blockType
+        }];
+      };
+      for await (const raw of response.body) {
+        pending += decoder.write(Buffer.from(raw));
+        let pos;
+        while ((pos = pending.indexOf("\n")) >= 0) {
+          const line = pending.slice(0, pos).trim();
+          pending = pending.slice(pos + 1);
+          if (!line.startsWith("data:")) continue;
+          const data = line.slice(5).trim();
+          if (data === "[DONE]") {
+            sawDone = true;
+            continue;
+          }
+          if (!data) continue;
+          const chunk = JSON.parse(data);
+          if (chunk.error) {
+            const detail = JSON.stringify(chunk.error);
+            if (isContextWindowExceededError(detail)) throw new HarnessError("\u6A21\u578B\u4E0A\u4E0B\u6587\u5DF2\u6EE1", "CONTEXT_WINDOW_EXCEEDED");
+            throw Error(chunk.error.message || "Model error");
+          }
+          if (chunk.usage) usage = chunk.usage;
+          const c = chunk.choices?.[0];
+          if (!c) continue;
+          const d = c.delta || {};
+          if (d.reasoning_content) {
+            for (const b of begin(0, "reasoning")) yield b;
+            reasoning += d.reasoning_content;
+            yield {
+              type: "reasoning-delta",
+              index: 0,
+              text: d.reasoning_content
+            };
+          }
+          if (d.content) {
+            for (const b of begin(1, "text")) yield b;
+            text2 += d.content;
+            yield {
+              type: "text-delta",
+              index: 1,
+              text: d.content
+            };
+          }
+          for (const t of d.tool_calls || []) {
+            const index = 2 + t.index;
+            for (const b of begin(index, "tool-call")) yield b;
+            const current = calls.get(index) || {
+              id: "",
+              name: "",
+              arguments: ""
+            };
+            if (t.id) current.id = t.id;
+            if (t.function?.name) current.name += t.function.name;
+            current.arguments += t.function?.arguments || "";
+            calls.set(index, current);
+            yield {
+              type: "tool-call-delta",
+              index,
+              id: ToolCallId(current.id),
+              ...(t.function?.name ? {
+                name: t.function.name
+              } : {}),
+              argumentsDelta: t.function?.arguments || ""
+            };
+          }
+          if (c.finish_reason) finish = c.finish_reason;
+        }
       }
-    };
-    for (const [index, c] of calls) {
-      if (finish === "length") continue;
-      if (!c.id || !c.name) throw Error("Incomplete tool call");
-      JSON.parse(c.arguments);
-      yield {
+      options.signal?.throwIfAborted();
+      if (!finish) throw Error("\u6A21\u578B\u8FDE\u63A5\u63D0\u524D\u7ED3\u675F\uFF0C\u8BF7\u91CD\u8BD5\uFF1B\u672A\u6267\u884C\u4E0D\u5B8C\u6574\u7684\u5DE5\u5177\u8C03\u7528\u3002");
+      if (started.has(0)) yield {
         type: "block-end",
-        index,
+        index: 0,
         block: {
-          type: "tool-call",
-          id: ToolCallId(c.id),
-          name: c.name,
-          arguments: c.arguments
+          type: "reasoning",
+          text: reasoning
         }
       };
+      if (started.has(1)) yield {
+        type: "block-end",
+        index: 1,
+        block: {
+          type: "text",
+          text: text2
+        }
+      };
+      for (const [index, c] of calls) {
+        if (finish === "length") continue;
+        if (!c.id || !c.name) throw Error("Incomplete tool call");
+        JSON.parse(c.arguments);
+        yield {
+          type: "block-end",
+          index,
+          block: {
+            type: "tool-call",
+            id: ToolCallId(c.id),
+            name: c.name,
+            arguments: c.arguments
+          }
+        };
+      }
+      if (usage) yield {
+        type: "usage",
+        usage: {
+          inputTokens: usage.prompt_tokens || 0,
+          outputTokens: usage.completion_tokens || 0
+        }
+      };
+      yield {
+        type: "finish",
+        reason: {
+          kind: finish === "length" ? "max-tokens" : calls.size ? "tool-calls" : "stop"
+        }
+      };
+    } finally {
+      options.signal?.removeEventListener("abort", cancel);
     }
-    if (usage) yield {
-      type: "usage",
-      usage: {
-        inputTokens: usage.prompt_tokens || 0,
-        outputTokens: usage.completion_tokens || 0
-      }
-    };
-    yield {
-      type: "finish",
-      reason: {
-        kind: finish === "length" ? "max-tokens" : calls.size ? "tool-calls" : "stop"
-      }
-    };
   }
 };
 
@@ -52808,7 +52932,7 @@ async function main() {
     settings = await bridge("/settings");
     const info = id && !agents.has(id) ? await ctx.sessionPersistence.stat(id) : void 0;
     if (id && !agents.has(id) && !info) throw Error("\u5BF9\u8BDD\u4E0D\u5B58\u5728\u6216\u5DF2\u5220\u9664");
-    if (!id) id = import_node_crypto8.default.randomUUID();
+    if (!id) id = import_node_crypto9.default.randomUUID();
     if (!agents.has(id)) {
       if (info && ctx.sessionPersistence.summary(id).archived) throw Error("\u8BF7\u5148\u6062\u590D\u5F52\u6863\u5BF9\u8BDD");
       const handle = info ? await ctx.agents.resume({
@@ -52942,7 +53066,7 @@ async function main() {
               if (boundary < 0) throw Error("\u8BF7\u7B49\u5F85\u8FD9\u6761\u56DE\u590D\u5B8C\u6210\u540E\u518D\u521B\u5EFA\u5206\u652F");
             }
             settings = await bridge("/settings");
-            const id = import_node_crypto8.default.randomUUID();
+            const id = import_node_crypto9.default.randomUUID();
             const handle = await ctx.agents.create({
               sessionId: SessionId(id),
               seed: buildForkSeed(events, SessionSeq(boundary)),
@@ -53061,7 +53185,7 @@ async function main() {
             state2.lastError = "";
             state2.revision++;
             void publishStatus().catch(() => {});
-            const steerId = req.url === "/steer" ? import_node_crypto8.default.randomUUID() : void 0;
+            const steerId = req.url === "/steer" ? import_node_crypto9.default.randomUUID() : void 0;
             if (steerId) state2.pendingGuidance.push({
               id: steerId,
               text: data.text,
