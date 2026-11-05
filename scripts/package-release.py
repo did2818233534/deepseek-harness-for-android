@@ -33,7 +33,7 @@ for edition, package in [('lite', 'dev.guga.dsh'), ('full', 'dev.guga.dsh.full')
         release = f'{release_version}-build.{code}' if args.build_tag else release_version
         destination = root / 'dist' / ('release-' + release)
         destination.mkdir(parents=True, exist_ok=True)
-        name = f'DSH-Pocket-{version}-{edition}-{abi}.apk'
+        name = f'DSH-for-Android-{version}-{edition}-{abi}.apk'
         target = destination / name
         shutil.copyfile(outputs / item['outputFile'], target)
         with target.open('rb') as src:

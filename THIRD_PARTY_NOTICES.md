@@ -1,6 +1,6 @@
 # Third-party components
 
-DSH Pocket is an independent Android adaptation, not an official DeepSeek application.
+DSH for Android is an independent Android adaptation, not an official DeepSeek application.
 
 - DeepSeek Harness, fixed commit in `vendor/harness/UPSTREAM.json`: MIT. Source and license included.
 - Cordis, Cosmokit, Schemastery: MIT; vendored upstream copies retain their licenses.

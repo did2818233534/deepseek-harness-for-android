@@ -122,7 +122,7 @@ public final class HarnessService extends Service {
     );
     return new Notification.Builder(this, "tasks")
       .setSmallIcon(R.drawable.ic_notification)
-      .setContentTitle("DSH Pocket")
+      .setContentTitle("DSH for Android")
       .setContentText(text)
       .setContentIntent(pi)
       .setOngoing(true)

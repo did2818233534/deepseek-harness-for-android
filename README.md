@@ -1,6 +1,6 @@
-# DSH Pocket
+# DSH for Android
 
-DSH Pocket 是 DeepSeek Harness 的非官方原生 Android 移植，适合在手机上联网检索、整理文档和处理图片。应用通过 JNI 在本机运行 Harness 核心，界面、文件选择、密钥存储和系统分享使用 Android API。
+DSH for Android 是 DeepSeek Harness 的非官方原生 Android 移植，适合在手机上联网检索、整理文档和处理图片。应用通过 JNI 在本机运行 Harness 核心，界面、文件选择、密钥存储和系统分享使用 Android API。
 
 **手机版版本为 v0.0.1，移植自官方 DeepSeek Harness 0.2.1-rc.5。** 两者独立编号。[上游版本与移植范围](docs/architecture.md)
 

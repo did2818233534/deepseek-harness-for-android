@@ -1,4 +1,4 @@
-# DSH Pocket 项目约定
+# DSH for Android 项目约定
 
 ## 界面
 - 全部应用内控件的形态、层级和交互参考 RikkaHub；保留 Pocket 原有浅紫配色。不得复制参考项目的实现代码。

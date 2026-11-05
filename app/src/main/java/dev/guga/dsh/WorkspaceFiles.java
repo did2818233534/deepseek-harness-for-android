@@ -52,7 +52,7 @@ final class WorkspaceFiles {
     host.io.execute(()->{Uri target=null;try{
       File file=new FileTools(host).resolve(path);String type=mime(path);
       if(!type.startsWith("image/")||type.equals("image/svg+xml"))throw new IOException("该格式请保存为文件");
-      ContentValues values=new ContentValues();values.put(MediaStore.Images.Media.DISPLAY_NAME,file.getName());values.put(MediaStore.Images.Media.MIME_TYPE,type);values.put(MediaStore.Images.Media.RELATIVE_PATH,"Pictures/DSH Pocket");values.put(MediaStore.Images.Media.IS_PENDING,1);
+      ContentValues values=new ContentValues();values.put(MediaStore.Images.Media.DISPLAY_NAME,file.getName());values.put(MediaStore.Images.Media.MIME_TYPE,type);values.put(MediaStore.Images.Media.RELATIVE_PATH,"Pictures/DSH for Android");values.put(MediaStore.Images.Media.IS_PENDING,1);
       target=host.getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI,values);if(target==null)throw new IOException("无法创建相册图片");
       try(InputStream in=new FileInputStream(file);OutputStream out=host.getContentResolver().openOutputStream(target)){if(out==null)throw new IOException("无法保存图片");FileTools.copy(in,out,FileTools.MAX_BYTES);}
       ContentValues done=new ContentValues();done.put(MediaStore.Images.Media.IS_PENDING,0);host.getContentResolver().update(target,done,null,null);

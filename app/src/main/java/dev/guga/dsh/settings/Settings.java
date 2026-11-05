@@ -69,7 +69,7 @@ public final class Settings {
     boolean thinking,
     int steps
   ) throws Exception {
-    if (!"https://api.deepseek.com".equals(base)) throw new Exception("Pocket 仅支持 DeepSeek 官方 API");
+    if (!"https://api.deepseek.com".equals(base)) throw new Exception("DSH for Android 仅支持 DeepSeek 官方 API");
     if (model.trim().isEmpty()) throw new Exception("模型名称不能为空");
     SharedPreferences.Editor edit = prefs
       .edit()

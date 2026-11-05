@@ -161,7 +161,7 @@ final class NativeBridge extends NanoHTTPD {
     return new Request.Builder()
       .url(url)
       .header("Authorization", "Bearer " + key)
-      .header("User-Agent", "DSH-Pocket/0.1 Android")
+      .header("User-Agent", "DSH-for-Android/0.0.1")
       .post(
         RequestBody.create(
           body,
