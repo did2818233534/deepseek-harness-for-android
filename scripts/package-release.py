@@ -29,7 +29,8 @@ for edition, package in [('lite', 'dev.guga.dsh'), ('full', 'dev.guga.dsh.full')
         if abi in architectures:
             raise ValueError('Duplicate output ' + abi)
         architectures.add(abi)
-        release = f'{version}-build.{code}' if args.build_tag else version
+        release_version = version.removeprefix('v')
+        release = f'{release_version}-build.{code}' if args.build_tag else release_version
         destination = root / 'dist' / ('release-' + release)
         destination.mkdir(parents=True, exist_ok=True)
         name = f'DSH-Pocket-{version}-{edition}-{abi}.apk'
