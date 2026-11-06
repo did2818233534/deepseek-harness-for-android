@@ -7,8 +7,8 @@ android {
  signingConfigs { personal { if (personalSigningFile.exists()) { storeFile file(personalSigning.storeFile); storePassword personalSigning.storePassword; keyAlias personalSigning.keyAlias; keyPassword personalSigning.keyPassword } } }
  flavorDimensions 'edition'
  productFlavors {
-  lite { dimension 'edition'; manifestPlaceholders = [updateManifest: 'latest-lite.json', editionLabel: 'DSH for Android 轻量版'] }
-  full { dimension 'edition'; applicationIdSuffix '.full'; manifestPlaceholders = [updateManifest: 'latest-full.json', editionLabel: 'DSH for Android 完整版'] }
+  lite { dimension 'edition'; manifestPlaceholders = [updateManifest: 'latest-lite.json', editionLabel: 'DSH for Android Lite'] }
+  full { dimension 'edition'; applicationIdSuffix '.full'; manifestPlaceholders = [updateManifest: 'latest-full.json', editionLabel: 'DSH for Android Full'] }
  }
  sourceSets.full.assets.srcDir(System.getenv('DSH_TERMUX_ASSETS') ?: rootProject.file('.local/termux/assets').absolutePath)
  namespace 'dev.guga.dsh'
