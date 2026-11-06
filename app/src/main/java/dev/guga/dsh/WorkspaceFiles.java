@@ -38,11 +38,11 @@ final class WorkspaceFiles {
   }
   static void open(MainActivity host,String path){
     host.io.execute(()->{try{File f=new FileTools(host).resolve(path);if(!f.isFile())throw new IOException("文件不存在或已删除");
-      host.runOnUiThread(()->{try{host.startActivity(Intent.createChooser(intent(host,path,false),"打开方式"));}catch(ActivityNotFoundException e){host.toast("没有可以打开此文件的应用，可长按文件链接分享或保存");}});
+      host.runOnUiThread(()->{if(host.isDestroyed()||host.isFinishing())return;try{host.startActivity(Intent.createChooser(intent(host,path,false),"打开方式"));}catch(ActivityNotFoundException e){host.toast("没有可以打开此文件的应用，可长按文件链接分享或保存");}});
     }catch(Exception e){host.toast(e.getMessage());}});
   }
   static void share(MainActivity host,String path){
-    host.io.execute(()->{try{WorkspaceProvider.resolve(host,WorkspaceProvider.uri(host,path));host.runOnUiThread(()->{try{host.startActivity(Intent.createChooser(intent(host,path,true),"分享文件"));}catch(ActivityNotFoundException e){host.toast("没有可分享的应用");}});}catch(Exception e){host.toast(e.getMessage());}});
+    host.io.execute(()->{try{WorkspaceProvider.resolve(host,WorkspaceProvider.uri(host,path));host.runOnUiThread(()->{if(host.isDestroyed()||host.isFinishing())return;try{host.startActivity(Intent.createChooser(intent(host,path,true),"分享文件"));}catch(ActivityNotFoundException e){host.toast("没有可分享的应用");}});}catch(Exception e){host.toast(e.getMessage());}});
   }
   static void save(MainActivity host,String path){
     host.exportPath=path;host.startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(mime(path)).putExtra(Intent.EXTRA_TITLE,new File(path).getName()),MainActivity.EXPORT);
@@ -71,13 +71,17 @@ final class WorkspaceFiles {
     });
   }
   static void preview(MainActivity host,String path){
+    final View origin=host.currentPage;
+    final String session=host.currentId;
+    final int ticket=++host.previewGeneration;
     host.io.execute(()->{try{
       File file=new FileTools(host).resolve(path);if(!file.isFile()||file.length()>FileTools.MAX_BYTES)throw new IOException("图片不存在或过大");
       if(mime(path).equals("image/svg+xml")){
-        String svg=new String(java.nio.file.Files.readAllBytes(file.toPath()),StandardCharsets.UTF_8);host.runOnUiThread(()->SvgPreview.open(host,svg,path));return;
+        if(file.length()>512*1024)throw new IOException("SVG 过大，仍可通过文件方式打开或保存");
+        String svg=new String(java.nio.file.Files.readAllBytes(file.toPath()),StandardCharsets.UTF_8);host.runOnUiThread(()->{if(previewCurrent(host,origin,session,ticket))SvgPreview.open(host,svg,path);});return;
       }
       Drawable drawable=decode(file,2048);
-      host.runOnUiThread(()->{if(host.isDestroyed())return;
+      host.runOnUiThread(()->{if(!previewCurrent(host,origin,session,ticket))return;
         ZoomImageView image=new ZoomImageView(host);
         image.setImageDrawable(drawable);
         image.setContentDescription("图片预览，轻点返回，双指缩放，长按分享或保存");
@@ -93,6 +97,11 @@ final class WorkspaceFiles {
         if(drawable instanceof Animatable)((Animatable)drawable).start();
         host.pageCleanup.put(image,()->{decor.setSystemUiVisibility(previousFlags);if(drawable instanceof Animatable)((Animatable)drawable).stop();image.setImageDrawable(null);});
       });
-    }catch(Exception e){host.toast("无法预览图片："+e.getMessage());}});
+    }catch(Exception e){host.runOnUiThread(()->{if(previewCurrent(host,origin,session,ticket))host.toast("无法预览图片："+e.getMessage());});}});
   }
+  private static boolean previewCurrent(MainActivity host,View origin,String session,int ticket){
+    return !host.isDestroyed()&&!host.isFinishing()&&host.currentPage==origin&&
+      java.util.Objects.equals(host.currentId,session)&&host.previewGeneration==ticket;
+  }
+
 }

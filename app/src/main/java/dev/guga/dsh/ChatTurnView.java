@@ -17,7 +17,7 @@ final class ChatTurnView extends LinearLayout {
   boolean expanded, initialized, wasActive;
   String selectionKey="";
   String turnId="", attachmentKey="";
-  final LinearLayout attachmentRow, outputFiles, assistantBody;
+  final LinearLayout attachmentRow, outputFiles, fileCards, assistantBody;
   String outputKey="", payload;
   boolean hasPhoto;
   int contentUpdates;
@@ -52,6 +52,7 @@ final class ChatTurnView extends LinearLayout {
     answer=bubble(false);answer.setBackground(null);assistantBody.addView(answer,new LayoutParams(-2,-2));
     svgContent=new SvgMessageContent(this);svgContent.setBackground(null);assistantBody.addView(svgContent,new LayoutParams(-2,-2));
     outputFiles=new LinearLayout(host);outputFiles.setOrientation(VERTICAL);outputFiles.setVisibility(GONE);outputFiles.setPadding(answer.getPaddingLeft(),host.dp(2),answer.getPaddingRight(),host.dp(8));assistantBody.addView(outputFiles,new LayoutParams(-2,-2));
+    fileCards=new LinearLayout(host);fileCards.setOrientation(VERTICAL);fileCards.setVisibility(GONE);addView(fileCards,new LayoutParams(-1,-2));
     ChatMarkdown.links(answer,host);
     user.setOnLongClickListener(v -> {host.messageActions.toggle(turnId+"/u");return true;});
     answer.setOnLongClickListener(v -> {host.messageActions.toggle(turnId+"/a");return true;});
@@ -64,12 +65,13 @@ final class ChatTurnView extends LinearLayout {
     int available = MeasureSpec.getSize(widthSpec) - getPaddingLeft() - getPaddingRight();
     assistantBody.getLayoutParams().width = hasPhoto && available > 0
       ? Math.max(1, Math.round(available * .82f)) : LayoutParams.WRAP_CONTENT;
+    if(available>0)fileCards.getLayoutParams().width=Math.max(1,Math.round(available*.82f));
     super.onMeasure(widthSpec, heightSpec);
   }
 
   TextView bubble(boolean mine) {
     TextView view=host.label("",16,host.ink); view.setTextIsSelectable(false);
-    view.setBreakStrategy(android.text.Layout.BREAK_STRATEGY_SIMPLE);
+    if(android.os.Build.VERSION.SDK_INT>=29)view.setBreakStrategy(android.graphics.text.LineBreaker.BREAK_STRATEGY_SIMPLE);
     view.setHyphenationFrequency(android.text.Layout.HYPHENATION_FREQUENCY_NONE);
     view.setLineSpacing(host.dp(3),1); view.setPadding(host.dp(14),host.dp(12),host.dp(14),host.dp(12));
     view.setMaxWidth(Math.max(host.dp(96),(int)(host.getResources().getDisplayMetrics().widthPixels*.82f)-host.dp(32)));
@@ -103,6 +105,7 @@ final class ChatTurnView extends LinearLayout {
         JSONObject item=attached.optJSONObject(n);if(item==null)continue;
         attachmentRow.addView(Attachments.card(host,item,null,()->{if(host.messageActions.active())host.messageActions.toggle(turnId+"/u");else if(item.optString("mime").startsWith("image/"))WorkspaceFiles.preview(host,item.optString("path"));else WorkspaceFiles.open(host,item.optString("path"));},()->host.messageActions.toggle(turnId+"/u")));
       }
+      attachmentSelection();
     }
     attachmentRow.setVisibility(attachmentRow.getChildCount()>0?VISIBLE:GONE);
     text(user,turn.optString("userText"));
@@ -186,7 +189,7 @@ final class ChatTurnView extends LinearLayout {
     if(nextSelection.equals(selectionKey))return;
     selectionKey=nextSelection;
     boolean attachmentSelected=host.messageActions.selected.contains(turnId+"/u");
-    attachmentRow.setBackground(attachmentSelected?host.ui.surface(0xFFDDD0F4,16):null);
+    attachmentSelection();
     attachmentRow.setContentDescription((attachmentSelected?"已选择，":"")+"用户附件，长按选择");
     assistantBody.setBackground(host.ui.bubble(host.messageActions.selected.contains(turnId+"/a")?0xFFDDD0F4:UiStyle.LOW,false));
     for(boolean mine:new boolean[]{true,false}){
@@ -194,6 +197,22 @@ final class ChatTurnView extends LinearLayout {
       android.graphics.drawable.GradientDrawable background=host.ui.bubble(selected?0xFFDDD0F4:mine?0xFFE8DEF8:UiStyle.LOW,mine);
       if(selected)background.setStroke(host.dp(2),UiStyle.ACCENT);if(mine)view.setBackground(background);
       view.setContentDescription((selected?"已选择，":"")+(mine?"用户消息":"助手消息")+"，长按选择");
+    }
+  }
+  // Paint each card, never the container: child margins must remain transparent.
+  void attachmentSelection() {
+    if(host.messageActions==null)return;
+    attachmentRow.setBackground(null);
+    for(LinearLayout group:new LinearLayout[]{attachmentRow,fileCards}) {
+      boolean selected=host.messageActions.selected.contains(turnId+(group==attachmentRow?"/u":"/a"));
+      for(int i=0;i<group.getChildCount();i++) {
+        View card=group.getChildAt(i);
+        android.graphics.drawable.GradientDrawable background=host.ui.shape(selected?0xFFDDD0F4:UiStyle.LOW,group==attachmentRow?16:20);
+        if(selected)background.setStroke(host.dp(2),UiStyle.ACCENT);
+        else if(group==fileCards)background.setStroke(host.dp(1),UiStyle.color(0xFFE1DBE8));
+        card.setBackground(background);
+        card.setSelected(selected);
+      }
     }
   }
   void showExpansion() {
@@ -218,6 +237,8 @@ final class ChatTurnView extends LinearLayout {
       case "web_search": return "搜索网页";
       case "web_fetch": return "读取网页";
       case "list_files": return "查看文件列表";
+      case "environment_info": return "查看执行环境";
+      case "uninstall_package": return "卸载工具";
       case "install_package": return "准备工具";
       case "process_file": return "处理文件";
       case "read_file": return "读取文件";

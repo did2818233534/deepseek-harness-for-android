@@ -219,6 +219,8 @@ final class NativeBridge extends NanoHTTPD {
   Object tool(String name, JSONObject a) throws Exception {
     if (a == null) a = new JSONObject();
     switch (name) {
+      case "environment_info": return EditionTools.environment(appContext,a);
+      case "uninstall_package": return EditionTools.uninstall(appContext,a.getString("package"));
       case "process_file": return EditionTools.run(appContext,files,a);
       case "install_package":
         return EditionTools.install(appContext,a.getString("package"));

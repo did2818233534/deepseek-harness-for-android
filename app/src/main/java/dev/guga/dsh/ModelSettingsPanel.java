@@ -264,11 +264,11 @@ final class ModelSettingsPanel {
       String secret = key == null ? "" : key.getText().toString().trim();
       if (secret.isEmpty()) secret = settings.apiKey();
       if (secret.isEmpty()) { setState("请先在模型与服务中填写 API Key"); return; }
-      refresh.setEnabled(false); setState("正在获取模型列表…");
+      refresh.setEnabled(false); setState(""); modelButton.setText("正在获取模型列表…");
       client.newCall(new okhttp3.Request.Builder().url("https://api.deepseek.com/models")
         .header("Authorization", "Bearer " + secret).build()).enqueue(new okhttp3.Callback() {
         void fail(String text) { a.runOnUiThread(() -> {
-          if (closed) return; refresh.setEnabled(true); setState(text);
+          if (closed) return; refresh.setEnabled(true); modelButton.setText(display(selected)); setState(""); a.toast(text);
         }); }
         public void onFailure(okhttp3.Call call, IOException e) { fail("获取失败，点击右侧刷新图标重试"); }
         public void onResponse(okhttp3.Call call, okhttp3.Response response) {
@@ -287,7 +287,7 @@ final class ModelSettingsPanel {
           } catch (Exception e) { fail("模型列表格式异常，请重试"); }
         }
       });
-    } catch (Exception e) { refresh.setEnabled(true); setState("无法读取密钥，请重新填写"); }
+    } catch (Exception e) { refresh.setEnabled(true); modelButton.setText(display(selected)); setState("无法读取密钥，请重新填写"); }
   }
   void close() {
     if (closed) return;

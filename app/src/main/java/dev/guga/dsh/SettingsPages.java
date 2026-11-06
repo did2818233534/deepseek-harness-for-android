@@ -30,9 +30,23 @@ final class SettingsPages {
     activity.settingEntry(entries, R.drawable.ic_folder, "文件库", "管理导入资料和生成的文件",
       false, true, v -> activity.files());
     activity.settingSection(entries, "应用");
+    activity.settingEntry(entries,R.drawable.ic_settings,"外观","选择跟随系统、浅色或深色主题",true,false,v -> appearance());
     activity.settingEntry(entries, R.drawable.ic_refresh, "应用更新", "自动更新与版本检查",
-      true, true, v -> updateSettings());
+      false, true, v -> updateSettings());
     activity.showPage("设置", entries);
+  }
+
+  void appearance(){
+    String[] values={"system","light","dark"}, labels={"跟随系统","浅色","深色"};
+    var prefs=activity.getSharedPreferences("appearance",0);
+    String current=prefs.getString("theme","system");
+    LinearLayout body=new LinearLayout(activity);body.setOrientation(LinearLayout.VERTICAL);
+    RadioGroup options=new RadioGroup(activity);
+    for(int i=0;i<values.length;i++){
+      final String value=values[i];RadioButton button=new RadioButton(activity);button.setText(labels[i]);button.setTextColor(activity.ink);button.setTextSize(16);button.setPadding(activity.dp(12),activity.dp(8),activity.dp(12),activity.dp(8));button.setMinimumHeight(activity.dp(56));button.setButtonTintList(android.content.res.ColorStateList.valueOf(activity.accent));button.setChecked(value.equals(current));
+      options.addView(button,new LinearLayout.LayoutParams(-1,-2));button.setOnClickListener(v->{if(!value.equals(prefs.getString("theme","system"))){prefs.edit().putString("theme",value).apply();activity.restoringAppearance=true;activity.recreate();}});
+    }
+    body.addView(options);activity.showPage("外观",body);
   }
 
   void personalization() {
@@ -48,7 +62,7 @@ final class SettingsPages {
     edit.setGravity(Gravity.TOP | Gravity.START);
     edit.setMinLines(5);
     edit.setTextSize(16); edit.setTextColor(activity.ink); edit.setHintTextColor(activity.muted);
-    edit.setBackground(activity.outline(0xFFF7F4FA, 16));
+    edit.setBackground(activity.outline(UiStyle.LOW, 16));
     edit.setPadding(activity.dp(16),activity.dp(14),activity.dp(16),activity.dp(14));
     edit.setHint("例如：用中文回答，先给结论。");
     edit.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(1500)});

@@ -10,6 +10,7 @@ fs.mkdirSync(root);
 const workspace = path.join(testHome, "workspace");
 fs.mkdirSync(workspace);
 const token = "test-token";
+let environmentSummary="共享环境测试：python 3.12", environmentReads=0;
 let packageTools=false,customInstructions="",limitThinking=false,thinkingSeconds=1;
 let modelName = "test-model", reasoningEffort, autoImageModel=true, cleanupConversationFiles=true;
 const modelNotices=[];
@@ -50,6 +51,7 @@ const bridge = http.createServer(async (req, res) => {
     return;
   }
   if (req.url === "/tool") {
+    if(b.name==="environment_info"){environmentReads++;res.end(JSON.stringify({summary:environmentSummary}));return;}
     toolCalls.push(b);
     await new Promise(r => setTimeout(r, 180));
     res.end(JSON.stringify({ path: "answer.txt", bytes: 5, ...(largeTool ? {content:"工具原始结果。".repeat(5000)} : {}) }));
@@ -648,6 +650,17 @@ try {
     assert.equal(toolCalls.at(-1).name,expected);
   }
   mode="text";await api("/select");
+  await api("/send",{text:"检查环境"});await settled();
+  assert(requests.at(-1).messages.some(m=>m.role==="system"&&m.content.includes(environmentSummary)));
+  assert(requests.at(-1).tools.some(t=>t.function.name==="uninstall_package"));
+  const environmentChat=(await api('/state')).id;
+  await api('/select');environmentSummary="共享环境测试：python 3.12，jq 1.8";
+  await api('/send',{text:'另一个对话'});await settled();
+  assert(requests.at(-1).messages.some(m=>m.role==="system"&&m.content.includes(environmentSummary)));
+  await api('/select',{id:environmentChat});environmentSummary="共享环境测试：python 3.12，jq 已卸载";
+  await api('/send',{text:'继续旧对话'});await settled();
+  assert(requests.at(-1).messages.some(m=>m.role==="system"&&m.content.includes(environmentSummary)));
+  assert(environmentReads>=3);
   for(const pref of ["偏好甲：用中文","偏好乙：简短",""]){
     customInstructions=pref;await api("/send",{text:"继续"});await settled();
     const sys=requests.at(-1).messages.filter(m=>m.role==="system").map(m=>m.content).join("");

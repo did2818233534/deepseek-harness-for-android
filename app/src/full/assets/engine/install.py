@@ -40,6 +40,14 @@ def extract(p,dest):
             member.name=str(n.relative_to(root))
             if member.islnk():raise ValueError('不支持该包的硬链接')
             t.extract(member,path=dest,filter='data')
+def publish_payload(package, directory, staging, installed):
+    if any(record.get('directory')==directory.name for record in installed.values()):return
+    # Verify a fresh payload before replacing untracked/partially removed data.
+    staging.mkdir();extract(package,staging)
+    if directory.is_symlink():directory.unlink()
+    elif directory.exists():shutil.rmtree(directory)
+    staging.rename(directory)
+
 def main():
     manifest=base/'installed.json'
     installed=json.loads(manifest.read_text()) if manifest.exists() else {}
@@ -55,12 +63,12 @@ def main():
         b=download('dists/stable/'+idx,int(size))
         if hashlib.sha256(b).hexdigest()!=h:raise ValueError('索引校验失败')
         repo={p['Package']:p for p in map(email.message_from_string,lzma.decompress(b).decode().split('\n\n')) if p['Package']}
-        staged={}
+        staged={};dependencies={}
         def plan(n):
             if n in seeds or n in installed or n in staged:return
             p=repo.get(n)
             if not p:raise ValueError('仓库中没有 '+n)
-            staged[n]=p
+            staged[n]=p;dependencies[n]=[]
             for dep in ((p['Pre-Depends'] or '')+','+(p['Depends'] or '')).split(','):
                 if not dep.strip():continue
                 for alt in dep.split('|'):
@@ -69,14 +77,13 @@ def main():
                     k,op,v=m.groups();version=seeds.get(k) or installed.get(k,{}).get('version') or (repo.get(k) or {}).get('Version')
                     if not version:continue
                     if op and subprocess.call(['/system/bin/linker64',str(prefix/'bin/dpkg'),'--compare-versions',version,op,v])!=0:continue
-                    plan(k);break
+                    dependencies[n].append(k);plan(k);break
                 else:raise ValueError('依赖不兼容: '+dep)
         plan(name)
         for k,p in staged.items():
             directory=base/p['SHA256']
-            if not directory.exists():
-                unpack=d/k;unpack.mkdir();extract(p,unpack);unpack.rename(directory)
-            installed[k]={'version':p['Version'],'directory':directory.name}
+            publish_payload(p,directory,d/k,installed)
+            installed[k]={'version':p['Version'],'directory':directory.name,'dependencies':dependencies[k]}
         nextfile=d/'installed.json';nextfile.write_text(json.dumps(installed));os.replace(nextfile,manifest)
         return {'package':name,'installed':list(staged),'version':installed[name]['version']}
 print(json.dumps(main()))

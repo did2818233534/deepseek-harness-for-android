@@ -56,7 +56,7 @@ final class EngineJob {
             return new JSONObject().put("text",new String(Files.readAllBytes(output.toPath()),StandardCharsets.UTF_8));
         }
         try(InputStream in=new FileInputStream(output)){return new JSONObject().put("path",files.importFile(in,out)).put("bytes",output.length());}
-    }finally{if(process!=null&&process.isAlive())process.destroyForcibly();for(File f:new File[]{input,output,error,worker,dir})f.delete();}
+    }finally{EditionTools.stopProcess(process);for(File f:new File[]{input,output,error,worker,dir})f.delete();}
  }
  private static boolean dynamicElf(File f)throws IOException{
     try(RandomAccessFile r=new RandomAccessFile(f,"r")){byte[] header=new byte[64];r.readFully(header);

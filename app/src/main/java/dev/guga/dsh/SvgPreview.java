@@ -60,6 +60,6 @@ final class SvgPreview {
     if(path!=null){header.addView(host.icon(R.drawable.ic_share,"分享图片",v->WorkspaceFiles.actions(host,path,false)),new LinearLayout.LayoutParams(host.dp(48),host.dp(48)));web.setOnLongClickListener(v->{WorkspaceFiles.actions(host,path,false);return true;});}
     web.setWebViewClient(new WebViewClient(){@Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){return true;}});
     page.addView(web,new LinearLayout.LayoutParams(-1,0,1));host.pageCleanup.put(page,()->{web.stopLoading();web.destroy();});
-    web.loadDataWithBaseURL("https://svg.invalid/",html(source),"text/html","UTF-8",null);
+    web.loadDataWithBaseURL("https://svg.invalid/",UiStyle.webColors(html(source)),"text/html","UTF-8",null);
   }
 }

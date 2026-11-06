@@ -60,7 +60,7 @@ public class MessageActionsTests {
       try{ChatShareProvider.resolve(c,Uri.parse("content://"+c.getPackageName()+".chat-share/../settings.xml"));fail("path escape accepted");}catch(FileNotFoundException expected){}
       ContentValues values=new ContentValues();values.put(MediaStore.Downloads.DISPLAY_NAME,"dsh-export-test-"+System.nanoTime()+".md");values.put(MediaStore.Downloads.MIME_TYPE,"text/markdown");
       destination=c.getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI,values);assertNotNull(destination);
-      a.messageActions.pendingExport=file.getName();a.messageActions.saveTo(destination);
+      a.messageActions.pendingExport="chat-newer-selection.md";a.messageActions.saveTo(destination,file.getName());
       try(InputStream in=c.getContentResolver().openInputStream(destination)){assertEquals(markdown,new String(in.readAllBytes(),StandardCharsets.UTF_8));}
     } finally {file.delete();if(destination!=null)c.getContentResolver().delete(destination,null,null);i.runOnMainSync(a::finish);}
   }

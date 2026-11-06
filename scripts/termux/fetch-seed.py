@@ -56,4 +56,4 @@ def run(arch,root):
     (dest.parent/'SHA256SUMS').write_text('\n'.join(manifest)+'\n')
     print(arch,len(manifest),'verified packages')
 if __name__=='__main__':
-    a=argparse.ArgumentParser();a.add_argument('arch',choices=DIGEST);a.add_argument('--cache',type=Path,default=Path('/opt/dsh-android/termux'));args=a.parse_args();run(args.arch,args.cache)
+    a=argparse.ArgumentParser();a.add_argument('arch',choices=DIGEST);a.add_argument('--cache',type=Path,default=Path(__file__).resolve().parents[2] / '.local' / 'termux');args=a.parse_args();run(args.arch,args.cache)

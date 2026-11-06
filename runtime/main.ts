@@ -98,6 +98,8 @@ async function main() {
   settings = await bridge("/settings");
   if(settings.packageTools)toolSpecs.push(["install_package","当用户任务需要尚未安装的本地工具时，按包名安装并返回真实结果。不要提交命令或网址。",{package:text("单个工具包名称")}]);
   if(settings.packageTools)toolSpecs.push(["process_file","用 Python 处理文本、表格或图片。data 是输入字节；将结果赋给 result（bytes 或 str）。可用 csv、io、json、re、Image、ImageOps 等，不允许访问文件路径、网络或启动子进程；用 io.BytesIO 处理图片。也可将 program 指定为已安装的动态工具名，用 args 传递参数，从标准输入读取数据。输出文件请指定 output_name，使用返回的实际路径。",{program:{type:"string"},code:{type:"string"},args:{type:"array",items:{type:"string"}},input_path:{type:"string"},input_text:{type:"string"},output_name:{type:"string"}}]);
+  if(settings.packageTools)toolSpecs.push(["environment_info","查询共享执行环境的包名和版本；结果分页，按 nextOffset 继续。",{offset:{type:"integer"}}]);
+  if(settings.packageTools)toolSpecs.push(["uninstall_package","卸载用户不再需要的后装工具包；内置包及仍被依赖的包不可卸载。",{package:text("单个工具包名称")}]);
   AndroidSessions.root = path.join(root, "sessions");
   const ctx = new Context();
   for (const p of [LlmRuntime, SessionStore, SessionProjection])

@@ -17,7 +17,7 @@ final class MessagePreview {
     var renderer=HtmlRenderer.builder().escapeHtml(true)
       .extensions(Arrays.asList(TablesExtension.create(),StrikethroughExtension.create())).build();
     var parser=org.commonmark.parser.Parser.builder().extensions(Arrays.asList(TablesExtension.create(),StrikethroughExtension.create())).build();
-    org.commonmark.node.Node document=parser.parse(source);
+    org.commonmark.node.Node document=parser.parse(MarkdownFiles.normalize(source));
     document.accept(new org.commonmark.node.AbstractVisitor(){@Override public void visit(org.commonmark.node.Link link){String path=WorkspaceFiles.linkPath(link.getDestination());if(path!=null)link.setDestination("https://workspace.invalid/"+Uri.encode(path));visitChildren(link);}});
     org.jsoup.nodes.Document clean=org.jsoup.Jsoup.parseBodyFragment(org.jsoup.Jsoup.clean(renderer.render(document),org.jsoup.safety.Safelist.relaxed()));
     int block=0;for(org.jsoup.nodes.Element pre:clean.select("pre")){pre.prependElement("a").attr("href","https://preview.invalid/code-copy/"+block++).attr("class","code-copy").attr("aria-label","复制代码").html("<svg class=copy-icon viewBox='0 0 24 24' aria-hidden='true'><rect x='8' y='8' width='12' height='12' rx='2'/><path d='M16 8V4H4v12h4'/></svg><svg class=check-icon viewBox='0 0 24 24' aria-hidden='true'><path d='m5 12 4 4 10-10'/></svg>");}
@@ -39,7 +39,7 @@ final class MessagePreview {
     web.setWebViewClient(new WebViewClient(){
       @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest request){
         Uri uri=request.getUrl();if("https".equals(uri.getScheme())&&"preview.invalid".equals(uri.getHost())&&uri.getPath()!=null&&uri.getPath().matches("/code-copy/[0-9]+")){
-          int index=Integer.parseInt(uri.getLastPathSegment());v.evaluateJavascript("document.querySelectorAll('pre code')["+index+"].textContent",result->{try{Object value=new org.json.JSONTokener(result).nextValue();if(value instanceof String){((ClipboardManager)host.getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("代码",(String)value));v.evaluateJavascript("(function(){var b=document.querySelectorAll('a.code-copy')["+index+"];if(!b)return;clearTimeout(b.copyTimer);b.classList.add('copied');b.setAttribute('aria-label','已复制代码');b.copyTimer=setTimeout(function(){b.classList.remove('copied');b.setAttribute('aria-label','复制代码');},1600);})()",null);}}catch(Exception ignored){}});return true;
+          int index;try{index=Integer.parseInt(uri.getLastPathSegment());}catch(NumberFormatException invalid){return true;}v.evaluateJavascript("document.querySelectorAll('pre code')["+index+"].textContent",result->{try{Object value=new org.json.JSONTokener(result).nextValue();if(value instanceof String){((ClipboardManager)host.getSystemService(Context.CLIPBOARD_SERVICE)).setPrimaryClip(ClipData.newPlainText("代码",(String)value));v.evaluateJavascript("(function(){var b=document.querySelectorAll('a.code-copy')["+index+"];if(!b)return;clearTimeout(b.copyTimer);b.classList.add('copied');b.setAttribute('aria-label','已复制代码');b.copyTimer=setTimeout(function(){b.classList.remove('copied');b.setAttribute('aria-label','复制代码');},1600);})()",null);}}catch(Exception ignored){}});return true;
         }if(WorkspaceFiles.openLink(host,uri.toString()))return true;if("https".equals(uri.getScheme())||"http".equals(uri.getScheme()))try{host.startActivity(new Intent(Intent.ACTION_VIEW,uri));}catch(ActivityNotFoundException e){host.toast("没有可打开链接的应用");}return true;
       }
     });
@@ -61,7 +61,7 @@ final class MessagePreview {
       String script=chooseAll
         ? "(function(){var s=window.getSelection(),r=document.createRange();r.selectNodeContents(document.querySelector('main'));s.removeAllRanges();s.addRange(r);return s.rangeCount>0&&!s.isCollapsed;})()"
         : "(function(){window.getSelection().removeAllRanges();return false;})()";
-      web.evaluateJavascript(script,result->{boolean selected="true".equals(result);select.setSelected(selected);select.setEnabled(true);select.setContentDescription(selected?"全不选":"全选");select.setTooltipText(select.getContentDescription());select.setImageResource(selected?R.drawable.ic_deselect_all:R.drawable.ic_select_all);select.setColorFilter(selected?Color.WHITE:UiStyle.ACCENT);select.setBackground(host.ui.surface(selected?UiStyle.ACCENT:UiStyle.SURFACE,24));});
+      web.evaluateJavascript(script,result->{boolean selected="true".equals(result);select.setSelected(selected);select.setEnabled(true);select.setContentDescription(selected?"全不选":"全选");select.setTooltipText(select.getContentDescription());select.setImageResource(selected?R.drawable.ic_deselect_all:R.drawable.ic_select_all);select.setColorFilter(selected?(UiStyle.dark?UiStyle.BACKGROUND:Color.WHITE):UiStyle.ACCENT);select.setBackground(host.ui.surface(selected?UiStyle.ACCENT:UiStyle.SURFACE,24));});
     });
     copy.setOnClickListener(v->web.evaluateJavascript("(function(){var selected=window.getSelection().toString();if(selected)return selected;var root=document.querySelector('main');var buttons=root.querySelectorAll('a.code-copy');buttons.forEach(function(b){b.style.display='none';});var text=root.innerText;buttons.forEach(function(b){b.style.display='';});return text;})()",result->{
       String selected="";try{Object value=new org.json.JSONTokener(result).nextValue();if(value instanceof String)selected=(String)value;}catch(Exception ignored){}
@@ -69,6 +69,6 @@ final class MessagePreview {
     }));
     header.addView(actions);page.addView(web,new LinearLayout.LayoutParams(-1,0,1));
     host.pageCleanup.put(page,()->{web.stopLoading();web.destroy();});
-    web.loadDataWithBaseURL("https://preview.invalid/",html(source),"text/html","UTF-8",null);
+    web.loadDataWithBaseURL("https://preview.invalid/",UiStyle.webColors(html(source)),"text/html","UTF-8",null);
   }
 }

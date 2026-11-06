@@ -102,6 +102,12 @@ export class AndroidAdapter extends LlmAdapter {
       }
       return out;
     });
+    if(this.settings().packageTools && options.purpose!=="session-title" && options.purpose!=="compaction") {
+      try {
+        const info=await this.bridge("/tool",{name:"environment_info",args:{detailed:false}},options.signal);
+        if(info.summary)messages.unshift({role:"system",content:"当前共享执行环境（以此次快照为准）：\n"+info.summary});
+      } catch { options.signal?.throwIfAborted(); }
+    }
     const preference=this.settings().customInstructions?.trim();
     if(preference && options.purpose!=="session-title" && options.purpose!=="compaction"){
       const extra="用户的自定义指令（回答偏好和背景；当前消息中的具体要求优先）：\n"+preference;

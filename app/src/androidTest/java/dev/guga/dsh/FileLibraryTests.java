@@ -28,5 +28,13 @@ public class FileLibraryTests {
  View row(MainActivity a,String path){for(int n=0;n<a.fileLibrary.list.getChildCount();n++){View v=a.fileLibrary.list.getChildAt(n);if(path.contentEquals(v.getContentDescription()==null?"":v.getContentDescription()))return v;}return null;}
  void waitReady(android.app.Instrumentation i,MainActivity a)throws Exception{for(int n=0;n<100;n++){boolean[] ready={false};i.runOnMainSync(()->ready[0]=a.fileLibrary.rows.length()>0);if(ready[0]){i.waitForIdleSync();return;}Thread.sleep(50);}fail("File list timed out");}
  void tap(android.app.Instrumentation i,View v)throws Exception{assertNotNull(v);Thread.sleep(150);i.waitForIdleSync();int[] p=new int[2];i.runOnMainSync(()->{v.getLocationOnScreen(p);p[0]+=v.getWidth()/2;p[1]+=v.getHeight()/2;});long t=android.os.SystemClock.uptimeMillis();MotionEvent d=MotionEvent.obtain(t,t,0,p[0],p[1],0),u=MotionEvent.obtain(t,t+60,1,p[0],p[1],0);i.sendPointerSync(d);i.sendPointerSync(u);d.recycle();u.recycle();i.waitForIdleSync();}
+ @Test public void nestedLibraryRespectsGlobalLimit()throws Exception {
+  var c=InstrumentationRegistry.getInstrumentation().getTargetContext();FileTools tools=new FileTools(c);
+  File dir=tools.resolve("000-list-limit-test");dir.mkdirs();
+  try {
+   for(int i=0;i<510;i++){File folder=new File(dir,i<500?"a":"b");folder.mkdirs();java.nio.file.Files.write(new File(folder,"file-"+i+".txt").toPath(),new byte[0]);}
+   assertEquals(500,tools.list().length());
+  }finally{for(File folder:dir.listFiles()){for(File file:folder.listFiles())file.delete();folder.delete();}dir.delete();}
+ }
  @Test public void deleteNeverEscapesWorkspace()throws Exception{var c=InstrumentationRegistry.getInstrumentation().getTargetContext();FileTools tools=new FileTools(c);File original=new File(c.getFilesDir(),"source-test.txt");java.nio.file.Files.write(original.toPath(),new byte[]{1});try{try{tools.deleteLibraryFile("../source-test.txt");fail("must reject");}catch(IOException expected){}assertTrue(original.exists());tools.deleteLibraryFile("already-removed-file.txt");}finally{original.delete();}}
 }

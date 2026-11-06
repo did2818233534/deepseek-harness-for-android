@@ -25,3 +25,39 @@ dist/
 .cxx/
 
 app/src/full/jniLibs/
+
+# Machine-local build inputs, signing and test data
+.local/
+
+# Generated runtime bundle (rebuild with node scripts/bundle.mjs)
+/app/src/main/assets/runtime/main.cjs
+/app/src/main/assets/runtime/main.cjs.map
+
+# Language/tool caches and test output
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+coverage/
+.nyc_output/
+*.tsbuildinfo
+*.class
+*.dex
+*.o
+*.obj
+*.hprof
+*.heapdump
+*.profraw
+*.profdata
+captures/
+.kotlin/
+
+# Local credentials and scratch files
+*.key
+*.pfx
+*.swp
+*.swo
+*~

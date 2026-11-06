@@ -37,11 +37,11 @@ final class ConversationDrawer {
       drawer.dismiss(); if (archived) navigation(false); else activity.newChat();
     });
     android.graphics.drawable.Drawable add = activity.getDrawable(R.drawable.ic_add).mutate();
-    add.setTint(Color.WHITE);add.setBounds(0,0,activity.dp(20),activity.dp(20));
+    add.setTint(UiStyle.dark?UiStyle.BACKGROUND:Color.WHITE);add.setBounds(0,0,activity.dp(20),activity.dp(20));
     create.setCompoundDrawablesRelative(add,null,null,null);
     create.setCompoundDrawablePadding(activity.dp(8));
     create.setTextSize(16);
-    create.setTextColor(Color.WHITE);
+    create.setTextColor(UiStyle.dark?UiStyle.BACKGROUND:Color.WHITE);
     create.setBackground(activity.shape(activity.accent, 26));
     footer.addView(create, new LinearLayout.LayoutParams(-2, activity.dp(52)));
     footer.addView(new View(activity), new LinearLayout.LayoutParams(0, 1, 1));

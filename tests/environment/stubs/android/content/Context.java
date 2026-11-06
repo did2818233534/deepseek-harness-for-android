@@ -1,0 +1,1 @@
+package android.content; import java.io.*; public abstract class Context { public abstract File getNoBackupFilesDir(); public File getCacheDir(){return getNoBackupFilesDir();} public Assets getAssets(){return new Assets();} public static class Assets{ public InputStream open(String s)throws IOException{throw new IOException();}} }

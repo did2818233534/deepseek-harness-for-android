@@ -1,6 +1,6 @@
 plugins { id 'com.android.application' }
 def personalSigning = new Properties()
-def personalSigningFile = file('/opt/dsh-android/signing/signing.properties')
+def personalSigningFile = rootProject.file('.local/signing/signing.properties')
 if (personalSigningFile.exists()) personalSigningFile.withInputStream { personalSigning.load(it) }
 android {
  splits { abi { enable true; reset(); include 'arm64-v8a', 'x86_64'; universalApk true } }
@@ -10,7 +10,7 @@ android {
   lite { dimension 'edition'; manifestPlaceholders = [updateManifest: 'latest-lite.json', editionLabel: 'DSH for Android 轻量版'] }
   full { dimension 'edition'; applicationIdSuffix '.full'; manifestPlaceholders = [updateManifest: 'latest-full.json', editionLabel: 'DSH for Android 完整版'] }
  }
- sourceSets.full.assets.srcDir(System.getenv('DSH_TERMUX_ASSETS') ?: '/opt/dsh-android/termux/assets')
+ sourceSets.full.assets.srcDir(System.getenv('DSH_TERMUX_ASSETS') ?: rootProject.file('.local/termux/assets').absolutePath)
  namespace 'dev.guga.dsh'
  // Match the native build toolchain; preserve debug symbols in packaged libraries.
  ndkVersion '29.0.14206865'
@@ -36,7 +36,7 @@ dependencies {
 
 tasks.register('verifyFullRuntime') {
  doLast {
-  def root = file(System.getenv('DSH_TERMUX_ASSETS') ?: '/opt/dsh-android/termux/assets')
+  def root = file(System.getenv('DSH_TERMUX_ASSETS') ?: rootProject.file('.local/termux/assets').absolutePath)
   ['aarch64','x86_64'].each { arch ->
    if (!new File(root,"termux/${arch}.zip").isFile()) throw new GradleException("Missing Full runtime for ${arch}; run scripts/build.sh")
   }

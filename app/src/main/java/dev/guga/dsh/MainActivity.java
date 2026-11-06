@@ -24,9 +24,11 @@ import org.json.*;
 
 public final class MainActivity extends Activity {
 
+  final java.util.ArrayDeque<InlineSvgView> warmSvgViews=new java.util.ArrayDeque<>();
+  boolean restoringAppearance;
   static final int IMPORT = 10,
     EXPORT = 11, IMPORT_IMAGE = 13;
-  final int ink = Color.rgb(30, 34, 43),
+  int ink = Color.rgb(30, 34, 43),
     muted = Color.rgb(127, 132, 144),
     accent = Color.rgb(103, 80, 164),
     bg = Color.rgb(253, 251, 255);
@@ -48,6 +50,7 @@ public final class MainActivity extends Activity {
   final ArrayDeque<View> pageHistory = new ArrayDeque<>();
   final Map<View, Runnable> pageCleanup = new HashMap<>();
   View currentPage;
+  int previewGeneration;
   PopupWindow modelPopup;
   final ArrayDeque<Dialog> dialogs = new ArrayDeque<>();
   android.window.OnBackInvokedCallback backCallback;
@@ -112,14 +115,17 @@ public final class MainActivity extends Activity {
 
   @Override
   public void onCreate(Bundle saved) {
+    UiStyle.configure(this);
+    setTheme(UiStyle.dark?R.style.AppThemeDark:R.style.AppTheme);
+    ink=UiStyle.INK;muted=UiStyle.MUTED;accent=UiStyle.ACCENT;bg=UiStyle.BACKGROUND;
     super.onCreate(saved);
     getWindow().setStatusBarColor(bg);
     getWindow().setNavigationBarColor(bg);
     getWindow()
       .getDecorView()
       .setSystemUiVisibility(
-        View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR |
-          View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+        UiStyle.dark?0:(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR |
+          View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR)
       );
     LinearLayout root = new LinearLayout(this);
     root.setOrientation(LinearLayout.VERTICAL);
@@ -199,7 +205,7 @@ public final class MainActivity extends Activity {
     controls.addView(icon(R.drawable.ic_model, "模型设置", v -> modelSettings(true)), new LinearLayout.LayoutParams(dp(48), dp(48)));
     controls.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
     send = icon(R.drawable.ic_send, "发送消息", v -> send());
-    send.setImageTintList(android.content.res.ColorStateList.valueOf(Color.WHITE));
+    send.setImageTintList(android.content.res.ColorStateList.valueOf(UiStyle.dark?UiStyle.BACKGROUND:Color.WHITE));
     send.setBackground(ui.surface(accent, 24));
     controls.addView(send, new LinearLayout.LayoutParams(dp(48), dp(48)));
     composer.addView(controls);
@@ -213,6 +219,7 @@ public final class MainActivity extends Activity {
       exportPath = saved.getString("exportPath", "");
       messageActions.pendingExport=saved.getString("pendingMarkdown", "");
     }
+    if(saved!=null && saved.getBoolean("appearancePage")){settingsPages.settings();settingsPages.appearance();}
     if(saved==null) IncomingFiles.receive(this,getIntent());
     if (
       Build.VERSION.SDK_INT >= 33 &&
@@ -230,6 +237,7 @@ public final class MainActivity extends Activity {
 
   @Override
   public void onSaveInstanceState(Bundle out) {
+    out.putBoolean("appearancePage",restoringAppearance);
     out.putString("draft", input.getText().toString());
     out.putString("attachments",attachments.snapshot().toString());
     out.putInt("attachmentGeneration",attachments.generation);
@@ -280,10 +288,10 @@ public final class MainActivity extends Activity {
   }
 
   TextView label(String s, int size, int color) {
-    TextView t = new TextView(this);
+    TextView t = new MessageTextView(this);
     t.setText(s);
     t.setTextSize(size);
-    t.setTextColor(color);
+    t.setTextColor(UiStyle.color(color));
     return t;
   }
 
@@ -326,11 +334,11 @@ public final class MainActivity extends Activity {
 
   void trackDialog(Dialog dialog) {
     dialogs.push(dialog);
-    android.window.OnBackInvokedCallback callback = dialog::dismiss;
+    android.window.OnBackInvokedCallback callback = Build.VERSION.SDK_INT >= 33 ? dialog::dismiss : null;
     if (Build.VERSION.SDK_INT >= 33)
       dialog.getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
         android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, callback);
-    dialog.setOnKeyListener((d, keyCode, event) -> {
+    if(Build.VERSION.SDK_INT < 33) dialog.setOnKeyListener((d, keyCode, event) -> {
       if (keyCode != KeyEvent.KEYCODE_BACK) return false;
       if (event.getAction() == KeyEvent.ACTION_UP) dialog.dismiss();
       return true;
@@ -360,7 +368,7 @@ public final class MainActivity extends Activity {
 
   GradientDrawable outline(int color, int radius) {
     GradientDrawable d = shape(color, radius);
-    d.setStroke(dp(1), Color.rgb(230, 232, 239));
+    d.setStroke(dp(1), UiStyle.color(0xFFE6E8EF));
     return d;
   }
 
@@ -462,6 +470,7 @@ public final class MainActivity extends Activity {
     stateStamp=state.optString("stamp");
     if (revision == -1) android.util.Log.i("DSH-Lifecycle", "Core state reachable");
     boolean changed = !currentId.equals(state.optString("id"));
+    if(changed)previewGeneration++;
     long next = state.optLong("revision");
     busy = state.optBoolean("busy");
     updateSendIcon();
@@ -620,6 +629,7 @@ public final class MainActivity extends Activity {
 
   @Override
   public void onBackPressed() {
+    previewGeneration++;
     if (modelPopup != null && modelPopup.isShowing()) { modelPopup.dismiss(); return; }
     if (!dialogs.isEmpty()) {
       dialogs.peek().dismiss();
@@ -630,6 +640,7 @@ public final class MainActivity extends Activity {
     if (!pageHistory.isEmpty()) {
       Runnable cleanup = pageCleanup.remove(currentPage);
       if (cleanup != null) cleanup.run();
+      restoringAppearance=false;
       currentPage = pageHistory.pop();
       settingsPage = currentPage != chatRoot;
       setContentView(currentPage);
@@ -638,6 +649,7 @@ public final class MainActivity extends Activity {
   }
 
   void pushPage(View page) {
+    previewGeneration++;
     ((android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE))
       .hideSoftInputFromWindow(input.getWindowToken(), 0);
     pageHistory.push(currentPage);
@@ -695,7 +707,7 @@ public final class MainActivity extends Activity {
 
   void addAction(LinearLayout parent, Button action, boolean primary) {
     action.setTextSize(16);
-    action.setTextColor(primary ? Color.WHITE : ink);
+    action.setTextColor(primary ? (UiStyle.dark?UiStyle.BACKGROUND:Color.WHITE) : ink);
     action.setBackground(new android.graphics.drawable.RippleDrawable(
       android.content.res.ColorStateList.valueOf(0x226750A4),
       shape(primary ? accent : 0xFFECE6F0, 16), shape(Color.WHITE, 24)));
@@ -995,14 +1007,16 @@ public final class MainActivity extends Activity {
     }
     if(data.getData()==null)return;
     Uri uri = data.getData();
+    final String selectedExportPath=exportPath;
+    final String selectedMarkdown=messageActions.pendingExport;
     io.execute(() -> {
       try {
         FileTools tools = new FileTools(this);
         if(request==MessageActions.SAVE_MARKDOWN) {
-          messageActions.saveTo(uri);
+          messageActions.saveTo(uri,selectedMarkdown);
         } else if (request == EXPORT) {
           try (
-            InputStream in = new FileInputStream(tools.resolve(exportPath));
+            InputStream in = new FileInputStream(tools.resolve(selectedExportPath));
             OutputStream out = getContentResolver().openOutputStream(uri, "wt")
           ) {
             if (out == null) throw new IOException("无法打开导出位置");

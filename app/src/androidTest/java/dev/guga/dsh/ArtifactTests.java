@@ -13,6 +13,19 @@ import org.json.*;
 import org.junit.Test;
 
 public class ArtifactTests {
+ @Test public void delayedPreviewDoesNotOpenInAnotherConversation()throws Exception {
+   var i=InstrumentationRegistry.getInstrumentation();var c=i.getTargetContext();
+   MainActivity a=(MainActivity)i.startActivitySync(new Intent(c,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+   File file=new FileTools(c).resolve("delayed-preview.svg");java.nio.file.Files.write(file.toPath(),"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\"></svg>".getBytes(StandardCharsets.UTF_8));
+   var gate=new java.util.concurrent.CountDownLatch(1);
+   try {
+     a.io.execute(()->{try{gate.await(5,java.util.concurrent.TimeUnit.SECONDS);}catch(InterruptedException e){Thread.currentThread().interrupt();}});
+     View[] origin=new View[1];
+     i.runOnMainSync(()->{a.visible=false;origin[0]=a.currentPage;a.currentId="preview-before";WorkspaceFiles.preview(a,file.getName());a.currentId="preview-after";});
+     gate.countDown();a.io.submit(()->{}).get(5,java.util.concurrent.TimeUnit.SECONDS);i.waitForIdleSync();
+     i.runOnMainSync(()->assertSame(origin[0],a.currentPage));
+   }finally{gate.countDown();file.delete();i.runOnMainSync(a::finish);}
+ }
  @Test public void selectedFilesAreReadOnlyAndCannotEscapeWorkspace() throws Exception {
   var c=InstrumentationRegistry.getInstrumentation().getTargetContext();File file=new FileTools(c).resolve("artifact-test.txt");
   java.nio.file.Files.write(file.toPath(),"中文文件".getBytes(StandardCharsets.UTF_8));

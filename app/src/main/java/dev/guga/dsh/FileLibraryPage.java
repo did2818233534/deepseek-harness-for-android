@@ -25,7 +25,7 @@ final class FileLibraryPage {
    JSONObject item=rows.optJSONObject(n);String path=item.optString("path");
    LinearLayout row=host.row();row.setPadding(host.dp(8),host.dp(8),host.dp(8),host.dp(8));row.setMinimumHeight(host.dp(64));row.setContentDescription(path);
    if(selecting){CheckBox check=new CheckBox(host);check.setChecked(selected.contains(path));check.setClickable(false);check.setFocusable(false);row.addView(check,new LinearLayout.LayoutParams(host.dp(48),host.dp(48)));}
-   else {ImageView icon=new ImageView(host);icon.setImageResource(R.drawable.ic_file);icon.setImageTintList(android.content.res.ColorStateList.valueOf(host.muted));row.addView(icon,new LinearLayout.LayoutParams(host.dp(32),host.dp(32)));}
+   else {ImageView icon=new ImageView(host);icon.setImageDrawable(new FileTypeIcon(host,path));row.addView(icon,new LinearLayout.LayoutParams(host.dp(32),host.dp(32)));}
    LinearLayout words=new LinearLayout(host);words.setOrientation(LinearLayout.VERTICAL);words.setPadding(host.dp(12),0,0,0);TextView name=host.label(path,16,host.ink);name.setMaxLines(2);name.setEllipsize(android.text.TextUtils.TruncateAt.END);words.addView(name);words.addView(host.label(Math.max(1,item.optLong("bytes")/1024)+" KB",12,host.muted));row.addView(words,new LinearLayout.LayoutParams(0,-2,1));
    row.setEnabled(!deleting);row.setOnClickListener(v->{if(deleting)return;if(selecting){if(!selected.remove(path))selected.add(path);render();}else host.fileActions(path);});list.addView(row,new LinearLayout.LayoutParams(-1,-2));
   }

@@ -60,7 +60,7 @@ final class SvgMessageContent extends LinearLayout {
       resetCopy=()->{copy.setImageResource(R.drawable.ic_copy);copy.setContentDescription("复制代码");};
       copy.setOnClickListener(v->{((android.content.ClipboardManager)host.getSystemService(android.content.Context.CLIPBOARD_SERVICE)).setPrimaryClip(android.content.ClipData.newPlainText("代码",raw));copy.removeCallbacks(resetCopy);copy.setImageResource(R.drawable.ic_check);copy.setContentDescription("已复制代码");copy.postDelayed(resetCopy,1600);});
       bar.addView(copy,new LayoutParams(host.dp(48),host.dp(48)));addView(bar,new LayoutParams(-1,-2));
-      text=host.label("",14,UiStyle.INK);text.setTypeface(android.graphics.Typeface.MONOSPACE);text.setHorizontallyScrolling(false);text.setPadding(host.dp(14),0,host.dp(14),host.dp(14));text.setBreakStrategy(android.graphics.text.LineBreaker.BREAK_STRATEGY_SIMPLE);text.setHyphenationFrequency(android.text.Layout.HYPHENATION_FREQUENCY_NONE);
+      text=host.label("",14,UiStyle.INK);text.setTypeface(android.graphics.Typeface.MONOSPACE);text.setHorizontallyScrolling(false);text.setPadding(host.dp(14),0,host.dp(14),host.dp(14));if(android.os.Build.VERSION.SDK_INT>=29)text.setBreakStrategy(android.graphics.text.LineBreaker.BREAK_STRATEGY_SIMPLE);text.setHyphenationFrequency(android.text.Layout.HYPHENATION_FREQUENCY_NONE);
       addView(text,new LayoutParams(-1,-2));int width=Math.max(host.dp(96),(int)(host.getResources().getDisplayMetrics().widthPixels*.82f)-host.dp(32));setMinimumWidth(width);text.setMaxWidth(width);
       text.setOnClickListener(v->{if(host.messageActions.active())select();else MessagePreview.open(host,owner.markdown.source);});text.setOnLongClickListener(v->{select();return true;});
     }

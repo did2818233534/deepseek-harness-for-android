@@ -13,6 +13,8 @@ export GRADLE_USER_HOME=/opt/gradle-cache
 bash scripts/build.sh
 ```
 
+生成的 `app/src/main/assets/runtime/main.cjs` 不入库；首次构建或修改 `runtime/` 后须运行 `node scripts/bundle.mjs`（完整构建入口已包含）。
+
 构建入口会打包运行时、构建 JNI、准备两种架构的完整版环境并构建两个 Debug 版本。只构建轻量版可依次执行 `node scripts/bundle.mjs`、`bash scripts/build-native.sh` 和 `./gradlew --no-daemon :app:assembleLiteDebug`。APK 在 app/build/outputs/apk 下按版本及构建类型分目录输出。
 
 ## 验证
@@ -28,7 +30,7 @@ node tests/runtime.mjs
 
 ## 签名和发布物
 
-签名配置位于 /opt/dsh-android/signing/signing.properties，字段为 storeFile、storePassword、keyAlias 和 keyPassword。密钥和本地 SDK 配置不入库。修改手机版显示版本时，持续递增 app/build.gradle 中的 versionCode；更新器按该整数判断升级。
+签名配置位于 .local/signing/signing.properties，字段为 storeFile、storePassword、keyAlias 和 keyPassword。密钥和本地 SDK 配置不入库。修改手机版显示版本时，持续递增 app/build.gradle 中的 versionCode；更新器按该整数判断升级。
 
 准备好完整构建环境后运行：
 
@@ -38,3 +40,5 @@ python3 scripts/package-release.py
 ```
 
 dist/release-版本号/ 中包含两版 APK、SHA256SUMS 和按版本区分的更新清单。旧客户端使用 latest.json（轻量版），新版分别使用 latest-lite.json 和 latest-full.json。发布前验证签名、包名、版本、校验值和覆盖安装；完整版的第三方分发要求见[第三方声明](../THIRD_PARTY_NOTICES.md)。
+
+本机工程数据统一存放在仓库 `.local/`（不提交 Git）：签名配置、Termux 构建输入、参考仓库和模拟器数据。安装的构建工具仍位于 `/opt/dsh-android/`。启动本机测试模拟器时设置 `ANDROID_AVD_HOME="$PWD/.local/avd"`。

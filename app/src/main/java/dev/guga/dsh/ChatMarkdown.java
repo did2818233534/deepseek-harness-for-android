@@ -26,16 +26,16 @@ final class ChatMarkdown {
         @Override public void configureTheme(io.noties.markwon.core.MarkwonTheme.Builder b){
           float d=context.getResources().getDisplayMetrics().density;
           b.headingTextSizeMultipliers(new float[]{1.35f,1.22f,1.12f,1.06f,1f,1f})
-            .headingBreakHeight(0).thematicBreakHeight(Math.max(1,(int)d)).thematicBreakColor(0xFFDCD5E5)
+            .headingBreakHeight(0).thematicBreakHeight(Math.max(1,(int)d)).thematicBreakColor(UiStyle.color(0xFFDCD5E5))
             .blockMargin((int)(16*d)).bulletWidth((int)(4*d)).blockQuoteWidth((int)(3*d)).blockQuoteColor(0xFFB6A4D4)
-            .codeBackgroundColor(0xFFE8E1F0).codeBlockBackgroundColor(0xFFE8E1F0).codeTextColor(0xFF51416D)
+            .codeBackgroundColor(UiStyle.color(0xFFE8E1F0)).codeBlockBackgroundColor(UiStyle.color(0xFFE8E1F0)).codeTextColor(UiStyle.color(0xFF51416D))
             .linkColor(UiStyle.ACCENT).isLinkUnderlined(false);
         }
       })
       .usePlugin(StrikethroughPlugin.create())
-      .usePlugin(TablePlugin.create(b->b.tableBorderColor(0xFFDCD5E5).tableBorderWidth(1)
+      .usePlugin(TablePlugin.create(b->b.tableBorderColor(UiStyle.color(0xFFDCD5E5)).tableBorderWidth(1)
         .tableCellPadding((int)(8*context.getResources().getDisplayMetrics().density))
-        .tableHeaderRowBackgroundColor(0xFFE8E1F0).tableOddRowBackgroundColor(0x0C6750A4)))
+        .tableHeaderRowBackgroundColor(UiStyle.color(0xFFE8E1F0)).tableOddRowBackgroundColor(0x0C6750A4)))
       .usePlugin(TaskListPlugin.create(context)).build();
     if(host!=null)host.markdownRenderer=renderer;
   }
@@ -69,7 +69,7 @@ final class ChatMarkdown {
       source=markdown;
       // Table rows discover wrapped cell heights during drawing. Markwon's
       // afterSetText hook attaches the invalidator that remeasures those rows.
-      android.text.Spanned parsed=renderer.toMarkdown(markdown);
+      android.text.Spanned parsed=renderer.toMarkdown(MarkdownFiles.normalize(markdown));
       boolean nextPlain=parsed.getSpans(0,parsed.length(),Object.class).length==0;
       if(plain && nextPlain && view.getText() instanceof android.text.Editable
           && parsed.toString().startsWith(view.getText().toString())) {
@@ -127,13 +127,18 @@ final class ChatMarkdown {
           int offset=layout.getOffsetForHorizontal(line,px);
           URLSpan[] spans=((Spanned)view.getText()).getSpans(offset,offset,URLSpan.class);
           if(spans.length>0) {
-            if(WorkspaceFiles.openLink(host,spans[0].getURL()))return true;
+            if(view instanceof MessageTextView){
+              ((MessageTextView)view).linkClick=()->{
+            if(WorkspaceFiles.openLink(host,spans[0].getURL()))return;
             Uri uri=Uri.parse(spans[0].getURL());String scheme=uri.getScheme();
             if("https".equalsIgnoreCase(scheme)||"http".equalsIgnoreCase(scheme)) {
               try {host.startActivity(new Intent(Intent.ACTION_VIEW,uri));}
               catch(android.content.ActivityNotFoundException ignored) {
                 android.widget.Toast.makeText(host,"没有可打开链接的应用",android.widget.Toast.LENGTH_SHORT).show();
               }
+            }
+              };
+              view.performClick();
             }
             return true;
           }

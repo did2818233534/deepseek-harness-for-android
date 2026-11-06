@@ -2,7 +2,7 @@
 import email, json, argparse, hashlib, os, shutil, subprocess, tempfile, zipfile
 from pathlib import Path
 
-p=argparse.ArgumentParser();p.add_argument('arch',choices=['aarch64','x86_64']);p.add_argument('--cache',type=Path,default=Path('/opt/dsh-android/termux'));a=p.parse_args()
+p=argparse.ArgumentParser();p.add_argument('arch',choices=['aarch64','x86_64']);p.add_argument('--cache',type=Path,default=Path(__file__).resolve().parents[2] / '.local' / 'termux');a=p.parse_args()
 arch=a.arch; cache=a.cache; assets=cache/'assets'/'termux';assets.mkdir(parents=True,exist_ok=True)
 with tempfile.TemporaryDirectory(dir=cache) as tmp:
     t=Path(tmp);prefix=t/'data/data/com.termux/files/usr'

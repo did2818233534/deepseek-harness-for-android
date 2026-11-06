@@ -108,15 +108,16 @@ final class MessageActions {
   void export(boolean local){
     String markdown=markdown();host.io.execute(()->{
       try{File file=write(host,markdown);host.runOnUiThread(()->{
-        try{if(local){pendingExport=file.getName();host.startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("text/markdown").putExtra(Intent.EXTRA_TITLE,"对话记录.md"),SAVE_MARKDOWN);}
+        try{if(host.isDestroyed()||host.isFinishing())return;if(local){pendingExport=file.getName();host.startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("text/markdown").putExtra(Intent.EXTRA_TITLE,"对话记录.md"),SAVE_MARKDOWN);}
           else host.startActivity(Intent.createChooser(shareIntent(host,file),"分享 Markdown 文件"));
         }catch(Exception e){host.toast("无法打开分享或保存界面："+e.getMessage());}
       });}catch(Exception e){host.toast(e.getMessage());}
     });
   }
-  void saveTo(Uri uri) throws IOException {
-    if(!pendingExport.matches("chat-[a-f0-9-]+\\.md"))throw new IOException("请重新选择消息后保存");
-    File file=new File(ChatShareProvider.directory(host),pendingExport);
+  void saveTo(Uri uri) throws IOException {saveTo(uri,pendingExport);}
+  void saveTo(Uri uri,String exportName) throws IOException {
+    if(!exportName.matches("chat-[a-f0-9-]+\\.md"))throw new IOException("请重新选择消息后保存");
+    File file=new File(ChatShareProvider.directory(host),exportName);
     try(InputStream in=new FileInputStream(file);OutputStream out=host.getContentResolver().openOutputStream(uri,"wt")){
       if(out==null)throw new IOException("无法打开保存位置");FileTools.copy(in,out,FileTools.MAX_BYTES);
     }

@@ -52,7 +52,7 @@ final class Attachments {
   static View card(MainActivity host,JSONObject item,Runnable remove,Runnable click,Runnable hold){
     LinearLayout card=new LinearLayout(host);card.setGravity(Gravity.CENTER_VERTICAL);card.setPadding(host.dp(8),host.dp(8),0,host.dp(8));card.setBackground(host.ui.surface(UiStyle.LOW,16));
     LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(host.dp(remove==null?224:216),-2);cp.rightMargin=host.dp(8);cp.bottomMargin=host.dp(6);card.setLayoutParams(cp);
-    ImageView image=new ImageView(host);image.setImageResource(R.drawable.ic_folder);image.setScaleType(ImageView.ScaleType.CENTER_CROP);image.setContentDescription(item.optString("name"));card.addView(image,new LinearLayout.LayoutParams(host.dp(48),host.dp(48)));
+    ImageView image=new ImageView(host);image.setImageDrawable(new FileTypeIcon(host,item.optString("name",item.optString("path"))));image.setScaleType(ImageView.ScaleType.CENTER_CROP);image.setContentDescription(item.optString("name"));card.addView(image,new LinearLayout.LayoutParams(host.dp(48),host.dp(48)));
     TextView name=host.label(item.optString("name",item.optString("path")),13,host.ink);name.setMaxLines(2);name.setEllipsize(android.text.TextUtils.TruncateAt.END);name.setPadding(host.dp(8),0,host.dp(8),0);card.addView(name,new LinearLayout.LayoutParams(0,-2,1));
     if(remove!=null)card.addView(host.icon(R.drawable.ic_close,"移除 "+item.optString("name"),v->remove.run()),new LinearLayout.LayoutParams(host.dp(48),host.dp(48)));
     if(click!=null)card.setOnClickListener(v->click.run());if(hold!=null)card.setOnLongClickListener(v->{hold.run();return true;});
