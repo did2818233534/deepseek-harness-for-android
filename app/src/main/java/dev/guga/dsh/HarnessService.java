@@ -126,7 +126,7 @@ public final class HarnessService extends Service {
       .setContentText(text)
       .setContentIntent(pi)
       .setOngoing(true)
-      .addAction(new Notification.Action.Builder(null, "停止任务", ci).build())
+      .addAction(new Notification.Action.Builder(null, "停止所有对话任务", ci).build())
       .build();
   }
 
@@ -171,11 +171,10 @@ public final class HarnessService extends Service {
   public int onStartCommand(Intent i, int flags, int id) {
     if (i != null && "cancel".equals(i.getAction())) new Thread(() -> {
       try {
-        Api.call("/cancel", new org.json.JSONObject());
+        Api.call("/cancel-all", new org.json.JSONObject());
       } catch (Exception e) {
         failure = e.getMessage();
       }
-      taskStatus(false);
     }, "DSH-Cancel").start();
     return START_NOT_STICKY;
   }
@@ -184,7 +183,7 @@ public final class HarnessService extends Service {
   public void onTimeout(int startId, int fgsType) {
     new Thread(() -> {
       try {
-        Api.call("/cancel", new org.json.JSONObject());
+        Api.call("/cancel-all", new org.json.JSONObject());
       } catch (Exception e) {
         failure = e.getMessage();
       }

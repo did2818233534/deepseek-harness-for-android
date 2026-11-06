@@ -620,6 +620,25 @@ try {
   await api('/select');const dId=(await api('/state')).id;await api('/send',{text:'parallel D'});await until(()=>held.has('parallel D'));
   await api('/select',{id:cId});await api('/cancel');await settled();await api('/select',{id:dId});assert((await api('/state')).busy);assert.equal((await api('/state')).runningCount,1);
   held.get('parallel D')();await settled();held.get('parallel C')();assert.equal((await api('/state')).pendingGuidance.length,0);
+  // Global cancellation must target background jobs even when the selected chat is idle.
+  mode='parallel';await api('/select');const background=(await api('/state')).id;
+  await api('/send',{text:'parallel cancel all'});await until(()=>held.has('parallel cancel all'));
+  await api('/select');await api('/cancel-all');
+  await until(async()=>(await api('/state')).runningCount===0);held.get('parallel cancel all')();
+  await until(()=>statusBusy===false);
+  // Repeated switches evict idle sessions and adapters, but preserve busy agents and disk history.
+  mode='parallel';await api('/select');const retained=(await api('/state')).id;
+  await api('/send',{text:'parallel retained'});await until(()=>held.has('parallel retained'));
+  for(let n=0;n<14;n++)await api('/select');
+  let cacheState=await api('/state');assert(cacheState.loadedSessionCount<=9);assert(cacheState.runtimeStateCount<=9);
+  assert.equal(cacheState.sessionAdapterCount,cacheState.loadedSessionCount);assert.equal(cacheState.runningCount,1);
+  await api('/select',{id:retained});assert((await api('/state')).busy);
+  held.get('parallel retained')();await settled();
+  mode='text';await api('/select',{id:background});await api('/send',{text:'reload evicted session'});await settled();
+  assert((await api('/state')).turns.length>=2,'evicted history survives reload');
+  for(let n=0;n<12;n++)await api('/select');
+  cacheState=await api('/state');assert(cacheState.loadedSessionCount<=8);assert.equal(cacheState.runtimeStateCount,cacheState.loadedSessionCount);
+
   await api('/select');
   const compactState=await api('/state',{compact:true});
   assert(!('events' in compactState));assert(Array.isArray(compactState.turns));

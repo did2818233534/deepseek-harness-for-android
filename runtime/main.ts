@@ -36,6 +36,7 @@ if (!root || !bridgePort || !token)
 let settings: any = {}, active: any = null, revision = 0;
 const agents = new Map();
 const disposers = new Map<string,()=>Promise<void>>();
+const adapterDisposers = new Map<string,()=>void>();
 let archiveWork=0;
 const states = new Map<string, any>();
 const execution = new AsyncLocalStorage<any>();
@@ -164,10 +165,20 @@ async function main() {
     state.imageOriginalModel=null;state.settings={...state.settings,model:original};agent.options.model=original;
     modelNotice({sessionId:agent.id,restored:true,model:original});
   }
+  let controlQueue=Promise.resolve();
+  async function acquireControl():Promise<()=>void> {
+    const previous=controlQueue;let release!:()=>void;
+    controlQueue=new Promise<void>(resolve=>{release=resolve;});await previous;return release;
+  }
+  let trimScheduled=false;
+  function scheduleTrim(){
+    if(trimScheduled)return;trimScheduled=true;
+    setTimeout(async()=>{const release=await acquireControl();try{await trimAgents();}catch(e){console.error("Idle session cleanup failed",e);}finally{trimScheduled=false;release();}},0);
+  }
   const titles = new ConversationTitles(ctx, () => {revision++;});
   ctx.on("agent/status", ({ agent, status }) => {
     const state=stateOf(agent.id);state.busy=status!=="idle";state.revision++;revision++;
-    if(!state.busy){restoreImageModel(agent);state.live="";state.liveReasoning="";state.liveFrames=[];
+    if(!state.busy){scheduleTrim();restoreImageModel(agent);state.live="";state.liveReasoning="";state.liveFrames=[];
       void titles.generate(agent,state.settings.model).catch(()=>{});
       void ctx.sessionPersistence.flush().catch(e=>{state.lastError="会话保存失败："+e.message;state.revision++;revision++;});
     }
@@ -186,7 +197,17 @@ async function main() {
     revision++;
   });
   const archives=new ConversationArchives(ctx.sessionPersistence,AndroidSessions.root,path.join(root,"..","workspace"),()=>{archiveWork=archives.activeCount;revision++;void publishStatus().catch(()=>{});},()=>[...states.values()].map(s=>s.pendingGuidance));
-  async function releaseAgent(id){titles.cancel(id);const dispose=disposers.get(id);if(dispose)await dispose();disposers.delete(id);agents.delete(id);}
+  async function releaseAgent(id){
+    if(states.get(id)?.busy)throw Error("不能释放正在运行的对话");
+    titles.cancel(id);const dispose=disposers.get(id);if(dispose)await dispose();
+    adapterDisposers.get(id)?.();adapterDisposers.delete(id);
+    disposers.delete(id);agents.delete(id);states.delete(id);
+  }
+  async function trimAgents(){
+    // Keep at most eight idle agents, including the selected conversation.
+    let idle=[...agents.keys()].filter(id=>!states.get(id)?.busy);
+    for(const id of idle){if(id===active?.id)continue;if(idle.length<=8)break;await releaseAgent(id);idle=idle.filter(other=>other!==id);}
+  }
   async function select(id?) {
     settings = await bridge("/settings");
     const info=id&&!agents.has(id)?await ctx.sessionPersistence.stat(id):undefined;
@@ -198,11 +219,13 @@ async function main() {
       agents.set(id,handle.agent);disposers.set(id,handle.dispose);
     }
     active = agents.get(id);
+    agents.delete(id);agents.set(id,active); // Recently selected goes to the end.
     const state=stateOf(id);
     if(!state.registered){
-      ctx.llm.registerAdapter(["android-"+id],new AndroidAdapter((route,body,signal,raw)=>bridge(route,{...body,sessionId:id},signal,raw),()=>state.settings,path.join(root,"..","workspace")));
+      adapterDisposers.set(id,ctx.llm.registerAdapter(["android-"+id],new AndroidAdapter((route,body,signal,raw)=>bridge(route,{...body,sessionId:id},signal,raw),()=>state.settings,path.join(root,"..","workspace"))));
       state.registered=true;
     }
+    await trimAgents();
     revision++;
     fs.writeFileSync(path.join(root, "current"), id);
     return { id };
@@ -223,6 +246,7 @@ async function main() {
       res.end("{}");
       return;
     }
+    let releaseControl:(()=>void)|undefined;
     try {
       // Decode only after joining bytes: a TCP chunk can split any UTF-8 character.
       const chunks: Buffer[] = [];
@@ -234,6 +258,7 @@ async function main() {
       }
       const body = Buffer.concat(chunks).toString("utf8");
       const data = body ? JSON.parse(body) : {};
+      if(["/select","/session/fork","/session/archive","/session/delete","/send","/steer","/cancel","/cancel-all","/shutdown"].includes(req.url||""))releaseControl=await acquireControl();
       let out;
       const state=stateOf();
       switch (req.url) {
@@ -243,6 +268,7 @@ async function main() {
           if(!state.busy&&data.stamp===stamp){out={unchanged:true};break;}
           const events=active.session.snapshotEvents();
           out = {
+            loadedSessionCount:agents.size, runtimeStateCount:states.size, sessionAdapterCount:adapterDisposers.size,
             stamp,
             id: active.session.id,
             isBranch: !!active.session.header.parentSession,
@@ -328,7 +354,7 @@ async function main() {
         }
         case "/session/archive": {
           if(typeof data.archived!=='boolean')throw Error("归档状态无效");
-          if(stateOf(data.id).busy||archives.busy(data.id))throw Error("请等待这个对话的任务完成后再归档或恢复");
+          if(states.get(data.id)?.busy||archives.busy(data.id))throw Error("请等待这个对话的任务完成后再归档或恢复");
           if(data.archived){
             if(active?.id===data.id)await select();
             await releaseAgent(data.id);archives.archive(data.id);
@@ -336,7 +362,7 @@ async function main() {
           revision++;out={ok:true,pending:archives.busy(data.id)};break;
         }
         case "/session/delete": {
-          if (stateOf(data.id).busy||archives.busy(data.id)) throw Error("请等待这个对话的任务完成后再删除对话");
+          if (states.get(data.id)?.busy||archives.busy(data.id)) throw Error("请等待这个对话的任务完成后再删除对话");
           const cleanupSettings=await bridge("/settings");
           if(cleanupSettings.cleanupConversationFiles===false)await archives.unpack(data.id);
           const deleting=ctx.sessionPersistence.load(data.id);
@@ -399,6 +425,12 @@ async function main() {
           out = { ok: true };
           break;
         }
+        case "/cancel-all": {
+          const targets=[...agents.values()].filter(agent=>states.get(agent.id)?.busy);
+          for(const target of targets){stateOf(target.id).pendingGuidance=[];target.cancel({kind:"user"});}
+          await Promise.all(targets.map(target=>bridge("/cancel-network",{sessionId:target.id})));
+          await publishStatus();out={ok:true};break;
+        }
         case "/cancel": {
           const target=active;stateOf(target.id).pendingGuidance=[];target.cancel({kind:"user"});
           await bridge("/cancel-network",{sessionId:target.id});out={ok:true};break;
@@ -420,7 +452,7 @@ async function main() {
     } catch (e) {
       res.writeHead(400);
       res.end(JSON.stringify({ error: e.message }));
-    }
+    } finally {releaseControl?.();}
   });
   server.listen(0, "127.0.0.1", () => {
     fs.writeFileSync(

@@ -386,13 +386,13 @@ public final class MainActivity extends Activity {
   }
 
   void request(String route, JSONObject body, Success done) {
+    if(route.equals("/select")){attachments.reset();input.setText("");}
     coreIo.execute(() -> {
       try {
         Api.call(route, body);
         JSONObject selectedState=route.equals("/select")?Api.call("/state",new JSONObject().put("compact",true)):null;
         runOnUiThread(() -> {
           try {
-            if(route.equals("/select")){attachments.reset();input.setText("");}
             if(route.equals("/send")||route.equals("/steer")){sending=false;send.setEnabled(attachments.importing==0);}
             done.run();
             if(selectedState!=null&&visible)render(selectedState);
@@ -563,7 +563,6 @@ public final class MainActivity extends Activity {
     String error=state.optString("lastError");
     if(turnError==null) {turnError=label("",14,UiStyle.DANGER); turnError.setPadding(dp(14),dp(8),dp(14),dp(14));messages.addView(turnError);}
     ChatTurnView.text(turnError,readableError(error));
-    if(fileLibrary!=null && currentPage==fileLibrary.page && fileLibrary.selecting && !fileLibrary.deleting){fileLibrary.setSelecting(false);return;}
     if(messageActions.active())messageActions.updateForkEnabled();
     if(turns.length()==0&&!busy) scroll.post(() -> scroll.scrollTo(0,0));
     else if ((atBottom || changed) && !historyLoading) {
