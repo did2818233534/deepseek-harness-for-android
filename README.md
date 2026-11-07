@@ -15,6 +15,8 @@ DSH for Android 是 DeepSeek Harness 的非官方原生 Android 移植，适合�
 
 两版可共存，聊天、API Key 和更新渠道各自独立。在「设置 → 模型与服务」填入自己的 DeepSeek API Key，选择模型即可开始。试着附上一份 CSV，让它按月份汇总，再点回复中的文件链接打开结果。导入文件会复制到应用工作区，原件保留在原处。
 
+本开发分支另提供可与正式完整版共存的 **DSH Claude 测试版**，支持 Claude 官方服务及兼容中转站，见[配置和测试说明](docs/claude.md)。
+
 ## 文档
 
 - [使用指南](docs/usage.md) · [当前版本记录](CHANGELOG.md)

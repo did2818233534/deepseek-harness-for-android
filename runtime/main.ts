@@ -1,7 +1,7 @@
 import { ConversationArchives } from "./sessions/archives.ts";
 import { fileIdentity } from "./files/file-identity.ts";
 import { cleanupSessionFiles } from "./files/file-cleanup.ts";
-import { supportsImages, latestVisionModel } from "./providers/vision.ts";
+import { supportsImages, imageFallback } from "./providers/vision.ts";
 import "./compat/polyfills.ts";
 import { prepareAttachments } from "./files/attachments.ts";
 import { ConversationTitles } from "./sessions/titles.ts";
@@ -394,7 +394,8 @@ async function main() {
           if (!settings.hasKey) throw Error("请先在设置中填写 API Key");
           const attachments = prepareAttachments(path.join(root, "..", "workspace"), data.attachments, (state.busy?state.settings:settings).model, true);
           const current=state.busy?state.settings:settings;
-          const fileOnly=settings.autoImageModel===false&&!supportsImages(current.model,current.models)&&attachments.some(a=>a.mediaType);
+          const fallback=imageFallback(current);
+          const fileOnly=!fallback&&!supportsImages(current.model,current.models)&&attachments.some(a=>a.mediaType);
           const content: any[] = data.text ? [{type:"text", text:data.text}] : [];
           for (const a of attachments) {
             if (a.mediaType) {
@@ -405,10 +406,10 @@ async function main() {
           }
           if(!state.busy){state.settings={...settings};target.options.model=settings.model;state.steps=0;}
           if(fileOnly)modelNotice({sessionId:target.id,fileOnly:true});
-          else if(attachments.some(a=>a.mediaType)&&!supportsImages(state.settings.model,state.settings.models)){
+          else if(fallback&&attachments.some(a=>a.mediaType)&&!supportsImages(state.settings.model,state.settings.models)){
             state.imageOriginalModel=state.imageOriginalModel||state.settings.model;
-            state.settings={...state.settings,model:latestVisionModel};target.options.model=latestVisionModel;
-            modelNotice({sessionId:target.id,restored:false,model:latestVisionModel});
+            state.settings={...state.settings,model:fallback};target.options.model=fallback;
+            modelNotice({sessionId:target.id,restored:false,model:fallback});
           }
           state.question=data.text;state.busy=true;state.lastError="";state.revision++;
           void publishStatus().catch(()=>{});

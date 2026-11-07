@@ -1,4 +1,5 @@
-import {build} from '/opt/dsh-android/build-tools/node_modules/esbuild/lib/main.js';
+import {tool} from '../scripts/build-tools.mjs';
+const {build} = await tool('esbuild/lib/main.js');
 import fs from 'node:fs';import path from 'node:path';import os from 'node:os';import assert from 'node:assert/strict';import {createRequire} from 'node:module';
 const home=fs.mkdtempSync(path.join(os.tmpdir(),'dsh-archives-'));
 try{

@@ -20,7 +20,7 @@ final class SettingsPages {
     entries.setOrientation(LinearLayout.VERTICAL);
     entries.setPadding(activity.dp(4), activity.dp(12), activity.dp(4), activity.dp(20));
     activity.settingSection(entries, "模型与服务");
-    activity.settingEntry(entries, R.drawable.ic_model, "DeepSeek", "模型、API Key 与工具设置",
+    activity.settingEntry(entries, R.drawable.ic_model, "DeepSeek / Claude", "模型、API Key 与工具设置",
       true, true, v -> activity.modelSettings(false));
     activity.settingSection(entries, "聊天");
     activity.settingEntry(entries, R.drawable.ic_settings, "个性化", "设置适用于所有聊天的自定义指令", true, true, v -> personalization());
@@ -84,6 +84,10 @@ final class SettingsPages {
     String version="";
     try { version=activity.getPackageManager().getPackageInfo(activity.getPackageName(),0).versionName; } catch (Exception ignored) {}
     activity.settingSection(entries, "当前版本 " + version);
+    if (BuildConfig.CLAUDE_TEST) {
+      entries.addView(activity.label("Claude 独立测试版：通过测试 APK 手动更新，与正式完整版的数据互不影响。",16,activity.muted));
+      activity.showPage("应用更新", entries); return;
+    }
     LinearLayout update = activity.row();
     update.setPadding(activity.dp(16), activity.dp(16), activity.dp(16), activity.dp(16));
     update.setBackground(activity.shape(UiStyle.SURFACE, 24));

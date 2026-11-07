@@ -1,4 +1,5 @@
-import { build } from "/opt/dsh-android/build-tools/node_modules/esbuild/lib/main.js";
+import { modules, tool } from "./build-tools.mjs";
+const { build } = await tool("esbuild/lib/main.js");
 import fs from "node:fs";
 import path from "node:path";
 const root = path.resolve(
@@ -27,7 +28,7 @@ const result = await build({
   target: "node18",
   format: "cjs",
   metafile: true,
-  nodePaths: ["/opt/dsh-android/build-tools/node_modules"],
+  nodePaths: [modules],
   banner: {
     js: 'const __bundleUrl = require("node:url").pathToFileURL(__filename).href;',
   },
@@ -77,16 +78,16 @@ console.log(
 );
 // nodejs-mobile is built without ICU; expand Unicode property regexes at build time.
 const babel =
-  await import("/opt/dsh-android/build-tools/node_modules/@babel/core/lib/index.js");
+  await tool("@babel/core/lib/index.js");
 const regexPlugin = (
-  await import("/opt/dsh-android/build-tools/node_modules/@babel/plugin-transform-unicode-property-regex/lib/index.js")
+  await tool("@babel/plugin-transform-unicode-property-regex/lib/index.js")
 ).default;
 const setsPlugin = (
-  await import("/opt/dsh-android/build-tools/node_modules/@babel/plugin-transform-unicode-sets-regex/lib/index.js")
+  await tool("@babel/plugin-transform-unicode-sets-regex/lib/index.js")
 ).default;
 const output = "app/src/main/assets/runtime/main.cjs";
 const rewritePattern = (
-  await import("/opt/dsh-android/build-tools/node_modules/regexpu-core/rewrite-pattern.js")
+  await tool("regexpu-core/rewrite-pattern.js")
 ).default;
 const constructors = () => ({
   visitor: {

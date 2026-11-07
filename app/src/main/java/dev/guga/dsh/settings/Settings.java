@@ -47,7 +47,11 @@ public final class Settings {
   }
 
   public String apiKey() throws Exception {
-    String saved = prefs.getString("key", "");
+    return apiKey(provider());
+  }
+
+  public String apiKey(String protocol) throws Exception {
+    String saved = prefs.getString(field(protocol,"key"), "");
     if (saved.isEmpty()) return "";
     String[] p = saved.split(":");
     Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
@@ -69,19 +73,25 @@ public final class Settings {
     boolean thinking,
     int steps
   ) throws Exception {
-    if (!"https://api.deepseek.com".equals(base)) throw new Exception("DSH for Android 仅支持 DeepSeek 官方 API");
+    save(provider(), base, model, secret, thinking, steps);
+  }
+
+  public void save(String protocol, String base, String model, String secret, boolean thinking, int steps) throws Exception {
+    ModelEndpoint.provider(protocol);
+    base = ModelEndpoint.normalize(base);
     if (model.trim().isEmpty()) throw new Exception("模型名称不能为空");
     SharedPreferences.Editor edit = prefs
       .edit()
-      .putString("base", base.replaceAll("/+$", ""))
-      .putString("model", model.trim())
+      .putString("provider", protocol)
+      .putString(field(protocol,"base"), base)
+      .putString(field(protocol,"model"), model.trim())
       .putBoolean("thinking", thinking)
       .putInt("steps", Math.max(1, Math.min(128, steps)));
     if (!secret.isEmpty()) {
       Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
       cipher.init(Cipher.ENCRYPT_MODE, key());
       edit.putString(
-        "key",
+        field(protocol,"key"),
         Base64.encodeToString(cipher.getIV(), Base64.NO_WRAP) +
           ":" +
           Base64.encodeToString(
@@ -92,16 +102,33 @@ public final class Settings {
           )
       );
     }
+    if (!base.equals(base(protocol)) || (!secret.isEmpty() && !secret.trim().equals(apiKey(protocol))))
+      edit.remove(field(protocol,"modelCatalog"));
     if (!edit.commit()) throw new Exception("设置保存失败");
   }
 
-  public String base() {
-    return defaults.getString(R.string.default_api_base);
+  private static String field(String protocol, String name) {
+    return ModelEndpoint.ANTHROPIC.equals(ModelEndpoint.provider(protocol)) ? "anthropic." + name : name;
+  }
+  public String provider() { return prefs.getString("provider", ModelEndpoint.DEEPSEEK); }
+  public String base() { return base(provider()); }
+  public String base(String protocol) {
+    return prefs.getString(field(protocol,"base"), ModelEndpoint.ANTHROPIC.equals(protocol)
+      ? "https://api.anthropic.com" : defaults.getString(R.string.default_api_base));
+  }
+  public String model() { return model(provider()); }
+  public String model(String protocol) {
+    return prefs.getString(field(protocol,"model"), ModelEndpoint.ANTHROPIC.equals(protocol)
+      ? "claude-sonnet-4-6" : defaults.getString(R.string.default_model));
+  }
+  public String modelCatalog() { return prefs.getString(field(provider(),"modelCatalog"), ""); }
+  public void saveModelCatalog(String value) { prefs.edit().putString(field(provider(),"modelCatalog"),value).apply(); }
+  public boolean hasWebKey() {
+    String base=base(ModelEndpoint.DEEPSEEK);
+    return ("https://api.deepseek.com".equals(base) || "https://api.deepseek.com/v1".equals(base))
+      && !prefs.getString("key", "").isEmpty();
   }
 
-  public String model() {
-    return prefs.getString("model", defaults.getString(R.string.default_model));
-  }
 
   public void saveThinkingLimit(boolean enabled,int seconds) {
     prefs.edit().putBoolean("limitThinking",enabled).putInt("thinkingSeconds",seconds).apply();
@@ -131,13 +158,14 @@ public final class Settings {
 
   public org.json.JSONArray modelCapabilities(){
     org.json.JSONArray out=new org.json.JSONArray();
-    try {org.json.JSONArray rows=new JSONObject(prefs.getString("modelCatalog","{}")).optJSONArray("data");
+    try {org.json.JSONArray rows=new JSONObject(modelCatalog().isEmpty()?"{}":modelCatalog()).optJSONArray("data");
       if(rows!=null)for(int n=0;n<rows.length();n++){JSONObject row=rows.optJSONObject(n);if(row!=null)out.put(new JSONObject().put("id",row.optString("id")).put("input_modalities",row.optJSONArray("input_modalities")));}
     }catch(Exception ignored){}return out;
   }
   public JSONObject publicData() throws Exception {
     return new JSONObject()
-      .put("base", base()).put("webSearch", webSearch()).put("webFetch", webFetch())
+      .put("provider",provider()).put("base", base())
+      .put("webSearch", webSearch() && hasWebKey()).put("webFetch", webFetch() && hasWebKey())
       .put("model", model()).put("models",modelCapabilities()).put("autoImageModel",autoImageModel())
       .put("customInstructions",customInstructions()).put("cleanupConversationFiles",cleanupConversationFiles())
       .put("hasKey", !apiKey().isEmpty())

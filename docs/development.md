@@ -17,6 +17,8 @@ bash scripts/build.sh
 
 构建入口会打包运行时、构建 JNI、准备两种架构的完整版环境并构建两个 Debug 版本。只构建轻量版可依次执行 `node scripts/bundle.mjs`、`bash scripts/build-native.sh` 和 `./gradlew --no-daemon :app:assembleLiteDebug`。APK 在 app/build/outputs/apk 下按版本及构建类型分目录输出。
 
+Claude 分支的独立包名构建、账号内工具目录配置及新增测试见 [Claude 测试版](claude.md)。
+
 ## 验证
 
 ```sh

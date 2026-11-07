@@ -1,5 +1,6 @@
 package dev.guga.dsh;
 import dev.guga.dsh.settings.Settings;
+import dev.guga.dsh.settings.ModelEndpoint;
 import dev.guga.dsh.files.FileTools;
 
 import fi.iki.elonen.NanoHTTPD;
@@ -126,8 +127,10 @@ final class NativeBridge extends NanoHTTPD {
       String msg =
         e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
       try {
-        String secret = settings.apiKey();
-        if (!secret.isEmpty()) msg = msg.replace(secret, "[已隐藏]");
+        for (String protocol : new String[]{ModelEndpoint.DEEPSEEK, ModelEndpoint.ANTHROPIC}) {
+          String secret = settings.apiKey(protocol);
+          if (!secret.isEmpty()) msg = msg.replace(secret, "[已隐藏]");
+        }
       } catch (Exception ignored) {
         /* Original failure is reported without reading unavailable credentials. */
       }
@@ -156,7 +159,7 @@ final class NativeBridge extends NanoHTTPD {
   }
 
   private Request request(String url, String body) throws Exception {
-    String key = settings.apiKey();
+    String key = settings.apiKey(ModelEndpoint.DEEPSEEK);
     if (key.isEmpty()) throw new IOException("请在设置中填写 API Key");
     return new Request.Builder()
       .url(url)
@@ -176,7 +179,15 @@ final class NativeBridge extends NanoHTTPD {
   private Response model(JSONObject input) throws Exception {
     String sessionId=input.optString("sessionId");input.remove("sessionId");
     String requestId=input.optString("androidRequestId");input.remove("androidRequestId");
-    okhttp3.Call call=api.newCall(request(settings.base() + "/chat/completions", input.toString()).newBuilder().tag(String.class,sessionId).build());
+    String protocol=settings.provider(), base=settings.base();
+    String expectedProtocol=input.optString("androidProvider",protocol), expectedBase=input.optString("androidBase",base);
+    input.remove("androidProvider");input.remove("androidBase");
+    if (!protocol.equals(expectedProtocol) || !base.equals(expectedBase))
+      throw new IOException("模型服务设置已改变，请重新发送消息");
+    Request request=ModelEndpoint.request(protocol,base,false,settings.apiKey(protocol))
+      .post(RequestBody.create(input.toString(),MediaType.get("application/json; charset=utf-8")))
+      .tag(String.class,sessionId).build();
+    okhttp3.Call call=api.newCall(request);
     modelCalls.put(requestId,call);
     okhttp3.Response remote;
     try { remote=call.execute(); }
@@ -242,6 +253,7 @@ final class NativeBridge extends NanoHTTPD {
     boolean search = "https://api.deepseek.com/v1/tools/search".equals(endpoint);
     boolean fetch = "https://api.deepseek.com/v1/tools/fetch".equals(endpoint);
     if (!search && !fetch) throw new IOException("不支持的联网接口");
+    if (!settings.hasWebKey()) throw new IOException("联网工具需要在 DeepSeek 服务中配置独立的官方 API Key");
     if ((search && !settings.webSearch()) || (fetch && !settings.webFetch())) throw new IOException("此联网工具已关闭");
     try (okhttp3.Response response = api.newBuilder().callTimeout(30, TimeUnit.SECONDS).build().newCall(request(endpoint, input.getJSONObject("body").toString()).newBuilder().tag(String.class,input.optString("sessionId")).build()).execute()) {
       if (!response.isSuccessful()) throw new IOException("DeepSeek 联网接口返回 HTTP " + response.code());

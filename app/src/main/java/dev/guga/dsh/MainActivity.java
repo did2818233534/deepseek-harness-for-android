@@ -250,7 +250,7 @@ public final class MainActivity extends Activity {
   @Override
   public void onResume() {
     super.onResume();
-    ReleaseUpdater.checkAutomatically(this);
+    if (!BuildConfig.CLAUDE_TEST) ReleaseUpdater.checkAutomatically(this);
     visible = true;
     handler.post(poll);
   }

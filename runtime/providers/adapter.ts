@@ -1,9 +1,10 @@
 import crypto from "node:crypto";
+import { anthropicRequest, anthropicStream, isAnthropicContextError } from "./anthropic.ts";
 import { supportsImages } from "./vision.ts";
 import { attachmentImage } from "../files/attachments.ts";
 import { StringDecoder } from "node:string_decoder";
 import { LlmAdapter, ToolCallId, HarnessError, isContextWindowExceededError } from "@deepseek-ai/dsh-llm";
-/** Translates the upstream canonical transcript to a Chat Completions transport owned by Android. */
+/** Android-owned transports; the vendored harness keeps its canonical transcript. */
 export class AndroidAdapter extends LlmAdapter {
   constructor(
     private bridge,
@@ -17,6 +18,7 @@ export class AndroidAdapter extends LlmAdapter {
     // model IDs do not inherit an unverified capacity; overflow recovery remains available.
     const known = /^(deepseek-flash|deepseek-v4(?:\.1)?-(?:flash|pro)|deepseek-pro)$/i.test(model);
     const effort = this.settings().reasoningEffort;
+    if (this.settings().provider === "anthropic") return {provider,id:model,name:model,defaultMaxTokens:16384};
     return { provider, id: model, name: model,
       ...(known ? {context: {contextWindow: 1_000_000}} : {}),
       defaultMaxTokens: effort === "none" ? 8192 : effort === "max" ? 131072 : 65536,
@@ -67,13 +69,41 @@ export class AndroidAdapter extends LlmAdapter {
     if(expired) {
       options.signal?.throwIfAborted();
       budget.fast=true;
-      if(thought)yield {type:"block-end",index:0,block:{type:"reasoning",text:thought}};
+      if(thought && settings.provider!=="anthropic")yield {type:"block-end",index:0,block:{type:"reasoning",text:thought}};
       // A separate index range keeps the abandoned reasoning block distinct.
       for await(const chunk of this.requestStream(options,true))
         yield "index" in chunk ? {...chunk,index:chunk.index+100} : chunk;
     }
   }
+  async *claudeStream(options, fast: boolean) {
+    const settings = this.settings(), extras: string[] = [];
+    if (options.purpose !== "session-title" && options.purpose !== "compaction") {
+      if (settings.packageTools) {
+        try {
+          const info=await this.bridge("/tool",{name:"environment_info",args:{detailed:false}},options.signal);
+          if(info.summary) extras.push("当前共享执行环境（以此次快照为准）：\n"+info.summary);
+        } catch { options.signal?.throwIfAborted(); }
+      }
+      if(settings.customInstructions?.trim()) extras.push("用户的自定义指令（当前消息中的具体要求优先）：\n"+settings.customInstructions.trim());
+    }
+    const requestId=crypto.randomUUID();
+    const body={...anthropicRequest(options,settings,this.workspace,extras,fast),
+      androidProvider:"anthropic",androidBase:settings.base,androidRequestId:requestId};
+    const cancel=()=>{void this.bridge("/cancel-model",{androidRequestId:requestId}).catch(()=>{});};
+    options.signal?.throwIfAborted();
+    options.signal?.addEventListener("abort",cancel,{once:true});
+    try {
+      const response=await this.bridge("/model",body,options.signal,true);
+      if(!response.body) throw Error("Model returned no stream");
+      yield* anthropicStream(response.body,settings,options.signal);
+    } catch(error) {
+      if(isAnthropicContextError(error) || isContextWindowExceededError(error instanceof Error?error.message:String(error)))
+        throw new HarnessError("模型上下文已满","CONTEXT_WINDOW_EXCEEDED",{cause:error});
+      throw error;
+    } finally { options.signal?.removeEventListener("abort",cancel); }
+  }
   async *requestStream(options, fast:boolean) {
+    if (this.settings().provider === "anthropic") { yield* this.claudeStream(options,fast); return; }
     const omitImages = !supportsImages(options.model, this.settings().models);
     const messages = options.messages.map((m) => {
       const text = m.content
@@ -132,6 +162,8 @@ export class AndroidAdapter extends LlmAdapter {
     if (effort !== "none") body.reasoning_effort = effort;
     const requestId=crypto.randomUUID();
     body.androidRequestId=requestId;
+    body.androidProvider=this.settings().provider || "deepseek";
+    body.androidBase=this.settings().base;
     const cancel=()=>{void this.bridge("/cancel-model",{androidRequestId:requestId}).catch(()=>{});};
     options.signal?.throwIfAborted();
     options.signal?.addEventListener("abort",cancel,{once:true});
