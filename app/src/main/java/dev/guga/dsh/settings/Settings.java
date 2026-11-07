@@ -106,7 +106,6 @@ public final class Settings {
       if(!prefs.contains("activeModel")) edit.putString("activeModel",model());
       if(!prefs.contains(field(protocol,"enabledModels"))) {
         java.util.Set<String> enabled=enabledModels(protocol);
-        if(enabled.isEmpty() && !secret.trim().isEmpty()) enabled.add(model.trim());
         edit.putStringSet(field(protocol,"enabledModels"),enabled);
       }
     }
@@ -168,6 +167,14 @@ public final class Settings {
     java.util.Set<String> fallback=new java.util.LinkedHashSet<>();
     if (!prefs.getString(field(provider,"key"), "").isEmpty()) fallback.add(model(provider));
     return new java.util.TreeSet<>(prefs.getStringSet(field(provider,"enabledModels"), fallback));
+  }
+  public java.util.Set<String> customModels(String provider) {
+    return new java.util.TreeSet<>(prefs.getStringSet(field(provider,"customModels"),java.util.Collections.emptySet()));
+  }
+  public void addCustomModel(String provider,String id) throws Exception {
+    if(id.trim().isEmpty())throw new Exception("模型 ID 不能为空");
+    java.util.Set<String> ids=customModels(provider);ids.add(id.trim());
+    if(!prefs.edit().putStringSet(field(provider,"customModels"),ids).commit())throw new Exception("模型保存失败");
   }
   public void setModelEnabled(String provider,String id,boolean enabled) throws Exception {
     if(id.trim().isEmpty()) throw new Exception("模型 ID 不能为空");

@@ -12,6 +12,11 @@ public class ProviderDirectoryTests {
     Context c=new ContextWrapper(base){@Override public SharedPreferences getSharedPreferences(String ignored,int mode){return base.getSharedPreferences(name,mode);}};
     try {
       Settings s=new Settings(c);assertTrue(s.providerEnabled("deepseek"));assertFalse(s.providerEnabled("anthropic"));
+      assertTrue(s.enabledModels("anthropic").isEmpty());
+      s.saveProviderProfile("anthropic","https://relay.example","claude-opus-5-5","fake-test-key");
+      assertTrue("Entering an API key must not enable a model",s.enabledModels("anthropic").isEmpty());
+      s.addCustomModel("anthropic","custom-disabled");
+      assertTrue(s.customModels("anthropic").contains("custom-disabled"));assertTrue(s.enabledModels("anthropic").isEmpty());
       s.setModelEnabled("anthropic","claude-opus-5-5",true);
       try{s.selectModel("anthropic","claude-opus-5-5");fail();}catch(Exception expected){}
       for(int n=0;n<3;n++) {
@@ -32,7 +37,7 @@ public class ProviderDirectoryTests {
     try {
       i.runOnMainSync(()->{a.visible=false;a.busy=false;a.settingsPages.providers();});i.waitForIdleSync();Thread.sleep(200);
       for(int turn=0;turn<2;turn++) {
-        for(String label:new String[]{"启用 Claude / Anthropic","启用 DeepSeek"}) {
+        for(String label:new String[]{"启用 Claude","启用 DeepSeek"}) {
           i.runOnMainSync(()->{
             var rows=a.settingsPages.providerRows;Switch control=null;
             for(int n=0;n<rows.getChildCount();n++) {var card=(LinearLayout)rows.getChildAt(n);var toggle=(Switch)card.getChildAt(1);if(label.contentEquals(toggle.getContentDescription()))control=toggle;}

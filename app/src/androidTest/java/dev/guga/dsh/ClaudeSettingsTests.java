@@ -124,41 +124,31 @@ public class ClaudeSettingsTests {
     try {
       i.runOnMainSync(()->{a.visible=false;a.busy=false;try {panel[0]=new ModelSettingsPanel(a,false);panel[0].open();}catch(Exception e){throw new AssertionError(e);}});
       i.waitForIdleSync();
-      for (String target : new String[]{"Claude / Anthropic", "DeepSeek", "Claude / Anthropic", "DeepSeek"}) {
-        i.runOnMainSync(()->touch(panel[0].providerButton,panel[0].providerButton.getWidth()/2f,panel[0].providerButton.getHeight()/2f));
-        i.waitForIdleSync(); Thread.sleep(200);
-        i.runOnMainSync(()->{
-          var scroll=(android.widget.ScrollView)panel[0].popup.getContentView();
-          var list=(android.widget.LinearLayout)scroll.getChildAt(0);
-          var row=list.getChildAt(target.equals("DeepSeek")?0:1);
-          assertNotNull("Visible provider choice",row);
-          touch(row,row.getWidth()/2f,row.getHeight()/2f);
-        });
-        i.waitForIdleSync();
-        String expected=target.equals("DeepSeek")?"deepseek":"anthropic";
-        for(int n=0;n<20 && !expected.equals(panel[0].protocol);n++)Thread.sleep(100);
-        String[] detail={""};i.runOnMainSync(()->detail[0]=panel[0].state.getText().toString());
-        assertEquals(detail[0],expected,panel[0].protocol);
-        assertEquals("Editing a supplier must not activate it", "deepseek", new Settings(a).provider());
-      }
+      assertEquals(View.VISIBLE,panel[0].basicPage.getVisibility());assertEquals(View.GONE,panel[0].morePage.getVisibility());
       i.runOnMainSync(()->{try{panel[0].catalog("{\"data\":[{\"id\":\"model-a\"},{\"id\":\"model-b\"}]}");}catch(Exception e){throw new AssertionError(e);}});
+      i.waitForIdleSync();
       for(int pass=0;pass<3;pass++) {
-        i.runOnMainSync(()->touch(panel[0].modelButton,panel[0].modelButton.getWidth()/2f,panel[0].modelButton.getHeight()/2f));
-        i.waitForIdleSync();Thread.sleep(200);
-        for(int index=0;index<2;index++) {
-          final int at=index;
+        for(String id:new String[]{"model-a","model-b"}) {
           i.runOnMainSync(()->{
-            var rows=(android.widget.LinearLayout)((android.widget.ScrollView)panel[0].popup.getContentView()).getChildAt(0);
-            android.view.View row=null;String wanted="选择 "+(at==0?"model-a":"model-b");
-            for(int n=0;n<rows.getChildCount();n++)if(wanted.contentEquals(rows.getChildAt(n).getContentDescription()))row=rows.getChildAt(n);
-            assertNotNull(row);touch(row,row.getWidth()/2f,row.getHeight()/2f);
-          });i.waitForIdleSync();Thread.sleep(100);
+            View toggle=GeneralSettingsTests.findDescription(panel[0].modelRows,"启用模型 "+id);
+            assertNotNull(toggle);touch(toggle,toggle.getWidth()/2f,toggle.getHeight()/2f);
+          });i.waitForIdleSync();
         }
         assertEquals(pass!=1,new Settings(a).enabledModels("deepseek").contains("model-a"));
         assertEquals(pass!=1,new Settings(a).enabledModels("deepseek").contains("model-b"));
-        i.runOnMainSync(()->a.onBackPressed());i.waitForIdleSync();
-        assertFalse(panel[0].popup.isShowing());assertFalse(panel[0].closed);
       }
+      for(int repeat=0;repeat<2;repeat++) {
+        i.runOnMainSync(()->touch(panel[0].moreTab,20,20));i.waitForIdleSync();
+        assertSame(panel[0].page,a.currentPage);assertEquals(View.VISIBLE,panel[0].morePage.getVisibility());
+        final String next="https://edited-"+repeat+".example";
+        i.runOnMainSync(()->{panel[0].base.setText(next);touch(panel[0].modelsTab,20,20);});i.waitForIdleSync();
+        assertSame(panel[0].page,a.currentPage);assertEquals(View.VISIBLE,panel[0].basicPage.getVisibility());
+        assertEquals(next,new Settings(a).base(panel[0].protocol));
+      }
+      i.runOnMainSync(()->touch(panel[0].moreTab,20,20));i.waitForIdleSync();
+      i.runOnMainSync(()->{panel[0].manualModel.setText("manual-disabled");touch(panel[0].addModel,20,20);});i.waitForIdleSync();
+      assertTrue(new Settings(a).customModels("deepseek").contains("manual-disabled"));
+      assertFalse(new Settings(a).enabledModels("deepseek").contains("manual-disabled"));
       for(String model:new String[]{"custom-model-a","custom-model-b","custom-model-a"}) {
         i.runOnMainSync(()->{panel[0].manualModel.setText(model);assertTrue(panel[0].persist());assertEquals(model,new Settings(a).model(panel[0].protocol));});
       }
@@ -204,25 +194,9 @@ public class ClaudeSettingsTests {
       i.runOnMainSync(()->{touch(panel[0].resetButton,panel[0].resetButton.getWidth()/2f,panel[0].resetButton.getHeight()/2f);});
       i.waitForIdleSync();Thread.sleep(100);
       assertEquals(dev.guga.dsh.settings.ProviderRegistry.defaultPath(panel[0].protocol,"search"),new Settings(a).endpointPath(panel[0].protocol,"search"));
-      i.runOnMainSync(()->{panel[0].close();try{panel[0]=new ModelSettingsPanel(a,false);panel[0].open();}catch(Exception e){throw new AssertionError(e);}});
-      i.waitForIdleSync();Thread.sleep(150);
-      for(int repeat=0;repeat<2;repeat++) {
-        i.runOnMainSync(()->{
-          View more=null;for(int n=0;n<panel[0].box.getChildCount();n++){View child=panel[0].box.getChildAt(n);if("更多".equals(child.getContentDescription()))more=child;}
-          assertNotNull(more);touch(more,a.dp(24),more.getHeight()/2f);
-        });i.waitForIdleSync();
-        assertNotSame(panel[0].page,a.currentPage);
-        final String next="https://edited-"+repeat+".example";
-        i.runOnMainSync(()->{
-          android.widget.EditText edit=findEdit(a.currentPage,new Settings(a).base(panel[0].protocol));assertNotNull(edit);edit.setText(next);a.onBackPressed();
-        });i.waitForIdleSync();
-        assertSame(panel[0].page,a.currentPage);assertFalse(panel[0].suspended);
-        i.runOnMainSync(()->{assertEquals(next,panel[0].base.getText().toString());assertTrue(panel[0].persist());});
-        assertEquals(next,new Settings(a).base(panel[0].protocol));
-      }
     } finally {
       i.runOnMainSync(()->{if(panel[0]!=null)panel[0].close();a.finish();});
-      var edit=prefs.edit().remove("enabledModels").remove("anthropic.enabledModels").remove("activeModel").remove("anthropic.enabled");if(originalBase==null)edit.remove("base");else edit.putString("base",originalBase);
+      var edit=prefs.edit().remove("customModels").remove("enabledModels").remove("anthropic.enabledModels").remove("activeModel").remove("anthropic.enabled");if(originalBase==null)edit.remove("base");else edit.putString("base",originalBase);
       if(originalModel==null)edit.remove("model");else edit.putString("model",originalModel);
       if(originalProvider==null)edit.remove("provider");else edit.putString("provider",originalProvider);edit.commit();
       if(isolate) HarnessService.nodeStarted=started;

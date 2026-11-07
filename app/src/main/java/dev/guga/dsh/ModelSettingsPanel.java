@@ -22,7 +22,7 @@ final class ModelSettingsPanel {
   final Map<String,EditText> endpointFields=new LinkedHashMap<>();
   EditText usageKey;
   LinearLayout fetchEndpointRow;
-  Button usageButton, resetButton;
+  Button usageButton, resetButton, addModel;
   final Settings settings;
   final okhttp3.OkHttpClient client = new okhttp3.OkHttpClient.Builder()
     .callTimeout(20, TimeUnit.SECONDS).followRedirects(false).followSslRedirects(false).build();
@@ -30,7 +30,8 @@ final class ModelSettingsPanel {
   final Map<String, String> names = new HashMap<>();
   String selected, protocol;
   EditText base, manualModel;
-  Button providerButton;
+  Button modelsTab, moreTab;
+  LinearLayout basicPage, morePage, modelRows;
   int catalogGeneration;
   boolean closed, editing, loaded, suspended;
   LinearLayout box, selector;
@@ -69,21 +70,17 @@ final class ModelSettingsPanel {
     LinearLayout pageBox=box, basicBox=new LinearLayout(a), moreBox=new LinearLayout(a);
     basicBox.setOrientation(LinearLayout.VERTICAL);moreBox.setOrientation(LinearLayout.VERTICAL);
     if (!quick) {
-      providerButton = a.button(ProviderRegistry.get(protocol).label, v -> chooseProvider());
-      box.addView(a.helpTitle("供应商",13,a.muted,"每家供应商分别保存地址、密钥和已启用的模型。勾选的模型会同时出现在聊天页，切换此处只编辑配置。"));
-      styleDropdown(providerButton);
-      box.addView(providerButton,a.spacedControl());
       box=moreBox;
       base = a.field(box,"API 基础地址",settings.base(protocol),false);
       base.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_URI);
       manualModel = a.field(box,"模型 ID",selected,false);
       manualModel.setSingleLine(true);
-      box.addView(a.button("添加到聊天模型", v -> {
-        if(persist()) try { settings.setModelEnabled(protocol,manualModel.getText().toString(),true); if(!models.contains(selected)) models.add(selected); a.toast("已添加到聊天模型"); } catch(Exception e){setState(e.getMessage());}
-      }),a.spacedControl());
+      addModel=a.button("添加模型", v -> {
+        if(persist()) try { settings.addCustomModel(protocol,selected); if(!models.contains(selected)) models.add(selected); renderModelRows(); a.toast("已添加，请在模型页开启"); } catch(Exception e){setState(e.getMessage());}
+      });box.addView(addModel,a.spacedControl());
     }
-    if(!quick){box=basicBox;key=a.secretField(box,"API Key",settings.apiKey(protocol));key.setSelectAllOnFocus(true);}
-    box.addView(a.label(quick ? "模型" : "聊天页可选模型", 13, a.muted));
+    if(!quick){box=basicBox;key=a.secretField(box,"API Key",settings.apiKey(protocol));key.setSelectAllOnFocus(true);key.setHint("填写 API Key");key.setContentDescription("API Key");}
+    if(quick)box.addView(a.label("模型",13,a.muted));
     selector = a.row(); selector.setBackground(a.ui.surface(UiStyle.SURFACE, 16));
     modelButton = a.button(quick ? (settings.enabledModels(protocol).contains(selected) ? display(selected) : "请选择模型") : "选择启用的模型", v -> choose());
     modelButton.setBackgroundColor(Color.TRANSPARENT);
@@ -98,8 +95,14 @@ final class ModelSettingsPanel {
     modelButton.setContentDescription("选择模型");
     selector.addView(modelButton, new LinearLayout.LayoutParams(0, a.dp(56), 1));
     refresh = a.icon(R.drawable.ic_refresh, "刷新模型列表", v -> load());
-    if (!quick) selector.addView(refresh, new LinearLayout.LayoutParams(a.dp(48), a.dp(48)));
-    box.addView(selector, a.spacedControl());
+    if(quick)box.addView(selector,a.spacedControl());
+    else {
+      LinearLayout heading=a.row();
+      heading.addView(a.label("模型",16,a.ink),new LinearLayout.LayoutParams(0,-2,1));
+      heading.addView(refresh,new LinearLayout.LayoutParams(a.dp(48),a.dp(48)));
+      box.addView(heading,a.spacedControl());
+      modelRows=new LinearLayout(a);modelRows.setOrientation(LinearLayout.VERTICAL);box.addView(modelRows);
+    }
     state = a.label("", 12, a.muted);
     state.setPadding(a.dp(4), 0, a.dp(4), a.dp(8));
     state.setVisibility(View.GONE);
@@ -118,28 +121,80 @@ final class ModelSettingsPanel {
       usageKey=a.secretField(box,"用量查询 API Key（可选）",settings.usageKey(protocol));watch(usageKey);
       usageButton=a.button("查询用量 / 余额",v->queryUsage());box.addView(usageButton,a.spacedControl());
       resetButton=a.button("恢复当前供应商初始设置",v->resetDefaults());box.addView(resetButton,a.spacedControl());
-      box=pageBox;box.addView(advanced?moreBox:basicBox,new LinearLayout.LayoutParams(-1,-2));
-      if(!advanced) a.settingEntry(box,R.drawable.ic_settings,"更多","基地址、接口与扩展参数",true,true,v->{
-        if(!persist())return;
-        settings.saveEditingProvider(protocol);
-        try{if(pending!=null){a.handler.removeCallbacks(pending);pending=null;}suspended=true;new ModelSettingsPanel(a,false,true).open();}catch(Exception error){suspended=false;a.toast(error.getMessage());}
-      });
+      box=pageBox;basicPage=basicBox;morePage=moreBox;
+      LinearLayout tabs=a.row();tabs.setPadding(a.dp(4),a.dp(4),a.dp(4),a.dp(4));
+      tabs.setBackground(a.ui.shape(UiStyle.LOW,20));
+      modelsTab=a.button("模型",v->selectTab(false));moreTab=a.button("更多",v->selectTab(true));
+      modelsTab.setContentDescription("模型页");moreTab.setContentDescription("更多页");
+      tabs.addView(modelsTab,new LinearLayout.LayoutParams(0,a.dp(48),1));
+      tabs.addView(moreTab,new LinearLayout.LayoutParams(0,a.dp(48),1));
+      box.addView(tabs,a.spacedControl());
+      box.addView(basicBox,new LinearLayout.LayoutParams(-1,-2));box.addView(moreBox,new LinearLayout.LayoutParams(-1,-2));
+      showTab(advanced);
+
     }
     box.addView(state);
     if (quick) {
       dialog = a.bottomPanel("聊天设置", box);
       a.dialogCleanup.put(dialog, this::close);
     } else {
-      page = a.showPage(advanced?"更多":ProviderRegistry.get(protocol).label, box);
+      page = a.showPage(ProviderRegistry.get(protocol).label, box);
       a.pageCleanup.put(page, this::close);
       a.pageResume.put(page,this::resumeProfile);
       watch(key); watch(base); watch(manualModel);
     }
+    if(!quick) {models.addAll(settings.customModels(protocol));models.addAll(settings.enabledModels(protocol));renderModelRows();}
     String cache = settings.modelCatalog(protocol);
     if (!cache.isEmpty()) {
       try { catalog(cache); } catch (Exception ignored) {}
     }
 
+  }
+  void selectTab(boolean more) {
+    if(!persist())return;
+    if(pending!=null){a.handler.removeCallbacks(pending);pending=null;}
+    a.getWindow().getDecorView().clearFocus();
+    ((android.view.inputmethod.InputMethodManager)a.getSystemService(android.content.Context.INPUT_METHOD_SERVICE))
+      .hideSoftInputFromWindow(box.getWindowToken(),0);
+    showTab(more);
+  }
+  void showTab(boolean more) {
+    basicPage.setVisibility(more?View.GONE:View.VISIBLE);morePage.setVisibility(more?View.VISIBLE:View.GONE);
+    for(Button button:new Button[]{modelsTab,moreTab}) {
+      boolean chosen=(button==moreTab)==more;
+      button.setSelected(chosen);button.setTextColor(chosen?a.accent:a.muted);
+      button.setBackground(a.ui.surface(chosen?UiStyle.SURFACE:Color.TRANSPARENT,16));
+    }
+  }
+  void renderModelRows() {
+    if(modelRows==null)return;
+    List<String> ids=new ArrayList<>(new LinkedHashSet<>(models));
+    if(ModelEndpoint.ANTHROPIC.equals(ProviderRegistry.get(protocol).protocol))ModelList.newestClaudeFirst(ids,settings.modelCatalog(protocol));
+    Set<String> enabled=settings.enabledModels(protocol);
+    ids.sort((left,right)->Boolean.compare(enabled.contains(right),enabled.contains(left)));
+    modelRows.removeAllViews();
+    if(ids.isEmpty()){TextView empty=a.label("暂无模型，点击刷新获取",14,a.muted);empty.setPadding(a.dp(4),a.dp(12),a.dp(4),a.dp(12));modelRows.addView(empty);}
+    for(int n=0;n<ids.size();n++) {
+      String id=ids.get(n);
+      LinearLayout row=a.row();row.setPadding(a.dp(16),a.dp(12),a.dp(12),a.dp(12));
+      row.setBackground(a.ui.surface(UiStyle.LOW,16));
+      LinearLayout text=new LinearLayout(a);text.setOrientation(LinearLayout.VERTICAL);
+      TextView name=a.label(display(id),16,a.ink);text.addView(name);
+      if(!display(id).equals(id)){TextView api=a.label(id,12,a.muted);api.setPadding(0,a.dp(4),0,0);text.addView(api);}
+      row.addView(text,new LinearLayout.LayoutParams(0,-2,1));
+      Switch toggle=new Switch(a);toggle.setChecked(enabled.contains(id));toggle.setContentDescription("启用模型 "+id);
+      row.addView(toggle,new LinearLayout.LayoutParams(a.dp(56),a.dp(48)));
+      row.setOnClickListener(v->toggle.toggle());
+      toggle.setOnCheckedChangeListener((button,checked)-> {
+        try {
+          if(a.busy)throw new Exception("任务进行中，停止任务后再修改模型");
+          settings.setModelEnabled(protocol,id,checked);a.status.setText(settings.model());
+          a.handler.post(()->{if(!closed)renderModelRows();});
+        }catch(Exception error){setState(error.getMessage());a.handler.post(()->{if(!closed)renderModelRows();});}
+      });
+      LinearLayout.LayoutParams layout=new LinearLayout.LayoutParams(-1,-2);layout.bottomMargin=a.dp(8);
+      modelRows.addView(row,layout);
+    }
   }
   void openGeneral() throws Exception {
     general=true;
@@ -173,13 +228,6 @@ final class ModelSettingsPanel {
 
     }
   }
-  void styleDropdown(Button button) {
-    button.setBackground(a.ui.surface(UiStyle.SURFACE,16));
-    button.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
-    android.graphics.drawable.Drawable arrow=a.getDrawable(R.drawable.ic_chevron_down);
-    arrow.setBounds(0,0,a.dp(20),a.dp(20)); arrow.setTint(a.muted);
-    button.setCompoundDrawablesRelative(null,null,arrow,null);
-  }
   void showDropdown(View anchor, LinearLayout rows, int count) {
     ScrollView scroll=new ScrollView(a); scroll.addView(rows);
     popup=new PopupWindow(scroll,anchor.getWidth(),Math.min(a.dp(320),a.dp(16+count*72)),true);
@@ -190,35 +238,6 @@ final class ModelSettingsPanel {
     popup.setOnDismissListener(()->{if(a.modelPopup==current)a.modelPopup=null;});
     a.modelPopup=popup; popup.showAsDropDown(anchor,0,a.dp(8));
   }
-  void chooseProvider() {
-    if(popup!=null && popup.isShowing()){popup.dismiss();return;}
-    LinearLayout rows=new LinearLayout(a); rows.setOrientation(LinearLayout.VERTICAL);
-    rows.setPadding(a.dp(8),a.dp(8),a.dp(8),a.dp(8));
-    for(ProviderRegistry.Provider provider:ProviderRegistry.ALL) {
-      Button item=a.button(provider.label,v->{
-        if(!persist())return;
-        popup.dismiss();
-        try {
-          if(pending!=null){a.handler.removeCallbacks(pending);pending=null;}
-          catalogGeneration++;refresh.setEnabled(true);
-          protocol=provider.id;settings.saveEditingProvider(protocol);selected=settings.model(protocol);
-          editing=true;base.setText(settings.base(protocol));manualModel.setText(selected);key.setText(settings.apiKey(protocol));
-          for(String kind:ProviderRegistry.ENDPOINTS)endpointFields.get(kind).setText(settings.endpointPath(protocol,kind));
-          usageKey.setText(settings.usageKey(protocol));editing=false;
-          providerButton.setText(provider.label);models.clear();models.add(selected);names.clear();
-          modelButton.setText("选择启用的模型");setState("");
-          String cache=settings.modelCatalog(protocol);if(!cache.isEmpty())catalog(cache);
-        }catch(Exception error){editing=false;setState(error.getMessage());}
-      });
-      item.setGravity(Gravity.START|Gravity.CENTER_VERTICAL);
-      item.setBackground(a.ui.surface(provider.id.equals(protocol)?UiStyle.SURFACE:Color.TRANSPARENT,12));
-      android.graphics.drawable.Drawable mark=a.getDrawable(R.drawable.ic_check);
-      mark.setBounds(0,0,a.dp(24),a.dp(24));mark.setTint(provider.id.equals(protocol)?a.accent:Color.TRANSPARENT);
-      item.setCompoundDrawablesRelative(null,null,mark,null);
-      rows.addView(item,new LinearLayout.LayoutParams(-1,a.dp(64)));
-    }
-    showDropdown(providerButton,rows,ProviderRegistry.ALL.size());
-  }
   void resumeProfile() {
     if(closed || quick)return;
     try {
@@ -226,7 +245,7 @@ final class ModelSettingsPanel {
       base.setText(settings.base(protocol));manualModel.setText(settings.model(protocol));selected=settings.model(protocol);key.setText(settings.apiKey(protocol));
       for(String kind:ProviderRegistry.ENDPOINTS)endpointFields.get(kind).setText(settings.endpointPath(protocol,kind));
       usageKey.setText(settings.usageKey(protocol));
-      models.clear();models.addAll(settings.enabledModels(protocol));names.clear();
+      models.clear();models.addAll(settings.customModels(protocol));models.addAll(settings.enabledModels(protocol));names.clear();renderModelRows();
       String cache=settings.modelCatalog(protocol);if(!cache.isEmpty())catalog(cache);
       editing=false;setState("");
     }catch(Exception error){editing=false;setState(error.getMessage());}
@@ -238,7 +257,7 @@ final class ModelSettingsPanel {
       settings.resetProviderDefaults(protocol);catalogGeneration++;refresh.setEnabled(true);
       editing=true;base.setText(settings.base(protocol));selected=settings.model(protocol);manualModel.setText(selected);
       for(String kind:ProviderRegistry.ENDPOINTS)endpointFields.get(kind).setText(settings.endpointPath(protocol,kind));
-      editing=false;models.clear();models.addAll(settings.enabledModels(protocol));names.clear();setState("已恢复基地址、接口路径和默认模型");
+      editing=false;models.clear();models.addAll(settings.customModels(protocol));models.addAll(settings.enabledModels(protocol));names.clear();renderModelRows();setState("已恢复基地址、接口路径和默认模型");
     }catch(Exception error){editing=false;setState(error.getMessage());}
   }
   void queryUsage() {
@@ -345,7 +364,7 @@ final class ModelSettingsPanel {
       public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
       public void onTextChanged(CharSequence s, int start, int before, int count) {
         if (editing) return;
-        if (field == base || field == key || field == endpointFields.get("models")) { catalogGeneration++; refresh.setEnabled(true); models.clear(); models.add(selected); names.clear(); modelButton.setText(quick ? display(selected) : "选择启用的模型"); if (popup != null) popup.dismiss(); }
+        if (field == base || field == key || field == endpointFields.get("models")) { catalogGeneration++; refresh.setEnabled(true); models.clear(); models.addAll(settings.customModels(protocol));models.addAll(settings.enabledModels(protocol)); names.clear(); renderModelRows(); modelButton.setText(quick ? display(selected) : "选择启用的模型"); if (popup != null) popup.dismiss(); }
         if (pending != null) a.handler.removeCallbacks(pending);
         pending = () -> { if (!closed) persist(); };
         a.handler.postDelayed(pending, 800);
@@ -383,46 +402,7 @@ final class ModelSettingsPanel {
       return true;
     } catch (Exception e) { setState(e instanceof NumberFormatException ? "请输入有效的步骤数" : e.getMessage()); return false; }
   }
-  void choose() {
-    if(!quick && ModelEndpoint.ANTHROPIC.equals(ProviderRegistry.get(protocol).protocol))ModelList.newestClaudeFirst(models,settings.modelCatalog(protocol));
-    if(!quick)models.sort((left,right)->Boolean.compare(settings.enabledModels(protocol).contains(right),settings.enabledModels(protocol).contains(left)));
-    if(quick){chooseChatModel();return;}
-    if (popup != null && popup.isShowing()) { popup.dismiss(); return; }
-    LinearLayout rows = new LinearLayout(a); rows.setOrientation(LinearLayout.VERTICAL);
-    rows.setPadding(a.dp(8), a.dp(8), a.dp(8), a.dp(8));
-    for (String id : models) {
-      LinearLayout row = a.row(); row.setPadding(a.dp(12), a.dp(12), a.dp(12), a.dp(12));
-      row.setMinimumHeight(a.dp(64));
-      row.setBackground(a.ui.surface(settings.enabledModels(protocol).contains(id) ? UiStyle.SURFACE : Color.TRANSPARENT, 12));
-      LinearLayout text = new LinearLayout(a); text.setOrientation(LinearLayout.VERTICAL);
-      TextView name = a.label(display(id), 16, a.ink);
-      name.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-      text.addView(name);
-      TextView api = a.label(id, 12, a.muted); api.setPadding(0, a.dp(4), 0, 0); text.addView(api);
-      row.addView(text, new LinearLayout.LayoutParams(0, -2, 1));
-      ImageView check = new ImageView(a);
-      check.setImageResource(R.drawable.ic_check);
-      check.setImageTintList(android.content.res.ColorStateList.valueOf(a.accent));
-      check.setVisibility(settings.enabledModels(protocol).contains(id) ? View.VISIBLE : View.INVISIBLE);
-      LinearLayout.LayoutParams checkParams = new LinearLayout.LayoutParams(a.dp(24),a.dp(24));
-      checkParams.setMarginStart(a.dp(12));row.addView(check,checkParams);
-      row.setContentDescription("选择 " + id); row.setFocusable(true);
-      row.setOnClickListener(v -> {
-        try {
-          if(a.busy) throw new Exception("任务进行中，停止任务后再修改设置");
-          boolean enabled=!settings.enabledModels(protocol).contains(id);
-          settings.setModelEnabled(protocol,id,enabled);
-          a.status.setText(settings.model());
-          check.setVisibility(enabled?View.VISIBLE:View.INVISIBLE);
-          row.setBackground(a.ui.surface(enabled?UiStyle.SURFACE:Color.TRANSPARENT,12));
-          popup.dismiss();choose();
-        }catch(Exception error){setState(error.getMessage());}
-
-      });
-      rows.addView(row, new LinearLayout.LayoutParams(-1, -2));
-    }
-    showDropdown(selector,rows,models.size());
-  }
+  void choose() { if(quick)chooseChatModel(); }
   void chooseChatModel() {
     if(popup!=null && popup.isShowing()){popup.dismiss();return;}
     LinearLayout rows=new LinearLayout(a);rows.setOrientation(LinearLayout.VERTICAL);
@@ -466,7 +446,8 @@ final class ModelSettingsPanel {
       JSONObject item = data.optJSONObject(i);
       if (item != null) names.put(item.optString("id"), item.optString("name", item.optString("display_name")));
     }
-    models.clear(); models.addAll(available); for(String id:settings.enabledModels(protocol)) if(!models.contains(id))models.add(id); if(ModelEndpoint.ANTHROPIC.equals(ProviderRegistry.get(protocol).protocol))ModelList.newestClaudeFirst(models,json); loaded = true;
+    models.clear(); models.addAll(available);models.addAll(settings.customModels(protocol)); for(String id:settings.enabledModels(protocol)) if(!models.contains(id))models.add(id); if(ModelEndpoint.ANTHROPIC.equals(ProviderRegistry.get(protocol).protocol))ModelList.newestClaudeFirst(models,json); loaded = true;
+    renderModelRows();
     // Refresh never changes a user's selected model or silently saves the first option.
     modelButton.setText(quick ? display(selected) : "选择启用的模型");
     setState("");

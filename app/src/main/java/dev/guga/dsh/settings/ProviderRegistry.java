@@ -14,7 +14,7 @@ public final class ProviderRegistry {
   }
   public static final List<Provider> ALL = Collections.unmodifiableList(Arrays.asList(
     new Provider("deepseek", "DeepSeek", ModelEndpoint.DEEPSEEK, "https://api.deepseek.com", "deepseek-flash"),
-    new Provider("anthropic", "Claude / Anthropic", ModelEndpoint.ANTHROPIC, "https://api.anthropic.com", "claude-opus-5-5")
+    new Provider("anthropic", "Claude", ModelEndpoint.ANTHROPIC, "https://api.anthropic.com", "claude-opus-5-5")
   ));
   public static Provider get(String id) {
     for (Provider p : ALL) if (p.id.equals(id)) return p;

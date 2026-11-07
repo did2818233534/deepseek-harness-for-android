@@ -7,6 +7,12 @@ import dev.guga.dsh.settings.Settings;
 
 /** Screenshots from the same dedicated keyless emulator used by the touch tests. */
 public class ProviderVisualTests {
+  @Test public void captureDarkProviderPages() throws Exception {
+    var c=InstrumentationRegistry.getInstrumentation().getTargetContext();
+    var prefs=c.getSharedPreferences("appearance",0);String before=prefs.getString("theme","system");
+    try{prefs.edit().putString("theme","dark").commit();captureSupplierAndMorePages();}
+    finally{prefs.edit().putString("theme",before).commit();}
+  }
   @Test public void captureSupplierAndMorePages() throws Exception {
     var i=InstrumentationRegistry.getInstrumentation();var c=i.getTargetContext();
     assertFalse(c.getSharedPreferences("settings",0).contains("key"));assertFalse(c.getSharedPreferences("settings",0).contains("anthropic.key"));
@@ -14,12 +20,10 @@ public class ProviderVisualTests {
     MainActivity a=(MainActivity)i.startActivitySync(new Intent(c,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
     ModelSettingsPanel[] panel={null};String original=new Settings(a).editingProvider();
     try {
-      i.runOnMainSync(()->{a.visible=false;a.busy=false;new Settings(a).saveEditingProvider("anthropic");try{panel[0]=new ModelSettingsPanel(a,false);panel[0].open();}catch(Exception e){throw new AssertionError(e);}});
-      i.waitForIdleSync();Thread.sleep(300);capture(a,"provider-basic.png");
-      i.runOnMainSync(()->ClaudeSettingsTests.touch(panel[0].providerButton,panel[0].providerButton.getWidth()/2f,panel[0].providerButton.getHeight()/2f));
-      i.waitForIdleSync();Thread.sleep(200);capture(a,"provider-dropdown.png");
-      i.runOnMainSync(()->{panel[0].popup.dismiss();panel[0].close();try{panel[0]=new ModelSettingsPanel(a,false,true);panel[0].open();}catch(Exception e){throw new AssertionError(e);}});
-      i.waitForIdleSync();Thread.sleep(300);capture(a,"provider-more.png");
+      i.runOnMainSync(()->{a.visible=false;a.busy=false;new Settings(a).saveEditingProvider("anthropic");try{panel[0]=new ModelSettingsPanel(a,false);panel[0].open();panel[0].catalog("{\"data\":[{\"id\":\"claude-opus-5-5\"},{\"id\":\"claude-sonnet-5-5\"},{\"id\":\"claude-haiku-5-5\"},{\"id\":\"claude-sonnet-4-6\"}]}");}catch(Exception e){throw new AssertionError(e);}});
+      i.waitForIdleSync();Thread.sleep(300);capture(a,UiStyle.dark?"provider-basic-dark.png":"provider-basic.png");
+      i.runOnMainSync(()->ClaudeSettingsTests.touch(panel[0].moreTab,20,20));
+      i.waitForIdleSync();Thread.sleep(300);capture(a,UiStyle.dark?"provider-more-dark.png":"provider-more.png");
     }finally{i.runOnMainSync(()->{if(panel[0]!=null)panel[0].close();new Settings(a).saveEditingProvider(original);a.finish();});HarnessService.nodeStarted=previous;}
   }
   static void capture(MainActivity a,String name) throws Exception {
