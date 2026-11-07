@@ -49,6 +49,7 @@ public final class MainActivity extends Activity {
   boolean settingsPage;
   final ArrayDeque<View> pageHistory = new ArrayDeque<>();
   final Map<View, Runnable> pageCleanup = new HashMap<>();
+  final Map<View, Runnable> pageResume = new HashMap<>();
   View currentPage;
   int previewGeneration;
   PopupWindow modelPopup;
@@ -250,6 +251,7 @@ public final class MainActivity extends Activity {
   @Override
   public void onResume() {
     super.onResume();
+    dev.guga.dsh.settings.ModelCatalogRefresh.onAppOpened(this);
     if (!BuildConfig.CLAUDE_TEST) ReleaseUpdater.checkAutomatically(this);
     visible = true;
     handler.post(poll);
@@ -269,7 +271,7 @@ public final class MainActivity extends Activity {
     transcriptViews.clear();
     io.shutdown();coreIo.shutdown();
     for (Runnable cleanup : pageCleanup.values()) cleanup.run();
-    pageCleanup.clear();
+    pageCleanup.clear();pageResume.clear();
     for (Runnable cleanup : new ArrayList<>(dialogCleanup.values())) cleanup.run();
     dialogCleanup.clear();
     if (modelPopup != null) modelPopup.dismiss();
@@ -637,12 +639,14 @@ public final class MainActivity extends Activity {
     if(fileLibrary!=null && currentPage==fileLibrary.page && fileLibrary.selecting && !fileLibrary.deleting){fileLibrary.setSelecting(false);return;}
     if(messageActions.active() && currentPage==chatRoot) {messageActions.clear();return;}
     if (!pageHistory.isEmpty()) {
+      pageResume.remove(currentPage);
       Runnable cleanup = pageCleanup.remove(currentPage);
       if (cleanup != null) cleanup.run();
       restoringAppearance=false;
       currentPage = pageHistory.pop();
       settingsPage = currentPage != chatRoot;
       setContentView(currentPage);
+      Runnable resume=pageResume.get(currentPage);if(resume!=null)resume.run();
       currentPage.requestApplyInsets();
     } else moveTaskToBack(true);
   }

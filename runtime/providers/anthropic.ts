@@ -42,7 +42,7 @@ export function anthropicRequest(options, settings, workspace: string, systemExt
         ...(message.isError ? {is_error:true} : {})}];
     } else {
       const replay = message.source?.replayState;
-      const sameRoute = replay?.response?.protocol === 'anthropic' && replay.response.base === settings.base && message.source?.model === options.model;
+      const sameRoute = replay?.response?.protocol === 'anthropic' && replay.response.base === settings.base && replay.response.endpoint === settings.modelEndpoint && message.source?.model === options.model;
       message.content.forEach((block, position) => {
         if (block.type === 'text' && block.text) content.push({type:'text',text:block.text});
         if (block.type === 'image') {
@@ -162,5 +162,5 @@ export async function* anthropicStream(body, settings, signal?) {
   if(stop==='tool_use' && ![...blocks.values()].some(b=>b.type==='tool-call')) throw Error('Claude 未返回工具调用内容');
   yield {type:'usage',usage:{inputTokens:(usage.input_tokens||0)+(usage.cache_read_input_tokens||0)+(usage.cache_creation_input_tokens||0),outputTokens:usage.output_tokens||0}};
   yield {type:'finish',reason:{kind:stop==='max_tokens'?'max-tokens':stop==='tool_use'?'tool-calls':'stop'},
-    replayState:{response:{protocol:'anthropic',base:settings.base},blocks:nativeBlocks}};
+    replayState:{response:{protocol:'anthropic',base:settings.base,...(settings.modelEndpoint?{endpoint:settings.modelEndpoint}:{})},blocks:nativeBlocks}};
 }

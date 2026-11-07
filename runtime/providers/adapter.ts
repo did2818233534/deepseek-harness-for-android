@@ -88,7 +88,7 @@ export class AndroidAdapter extends LlmAdapter {
     }
     const requestId=crypto.randomUUID();
     const body={...anthropicRequest(options,settings,this.workspace,extras,fast),
-      androidProvider:"anthropic",androidBase:settings.base,androidRequestId:requestId};
+      androidEndpoint:settings.modelEndpoint,androidProviderId:settings.providerId || "anthropic",androidProvider:"anthropic",androidBase:settings.base,androidRequestId:requestId};
     const cancel=()=>{void this.bridge("/cancel-model",{androidRequestId:requestId}).catch(()=>{});};
     options.signal?.throwIfAborted();
     options.signal?.addEventListener("abort",cancel,{once:true});
@@ -162,8 +162,10 @@ export class AndroidAdapter extends LlmAdapter {
     if (effort !== "none") body.reasoning_effort = effort;
     const requestId=crypto.randomUUID();
     body.androidRequestId=requestId;
+    body.androidProviderId=this.settings().providerId || this.settings().provider || "deepseek";
     body.androidProvider=this.settings().provider || "deepseek";
     body.androidBase=this.settings().base;
+    body.androidEndpoint=this.settings().modelEndpoint;
     const cancel=()=>{void this.bridge("/cancel-model",{androidRequestId:requestId}).catch(()=>{});};
     options.signal?.throwIfAborted();
     options.signal?.addEventListener("abort",cancel,{once:true});

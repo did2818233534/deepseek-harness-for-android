@@ -32,6 +32,23 @@ public final class ModelEndpoint {
     return base + (models ? "/models" : ANTHROPIC.equals(protocol) ? "/messages" : "/chat/completions");
   }
 
+  public static String path(String value) {
+    value=value.trim();
+    if(!value.startsWith("/") || value.startsWith("//") || value.contains("?") || value.contains("#") || value.contains("\\") || value.contains("..") || value.contains(":") || value.contains(" "))
+      throw new IllegalArgumentException("接口路径须以 / 开头，不含域名、查询参数或片段");
+    return value;
+  }
+  public static String resolve(String base,String endpoint) {
+    base=normalize(base);endpoint=path(endpoint);
+    if(base.endsWith("/v1") && endpoint.startsWith("/v1/"))base=base.substring(0,base.length()-3);
+    return base+endpoint;
+  }
+
+  public static Request.Builder configured(Settings settings,String provider,String kind,String secret) {
+    String protocol=ProviderRegistry.get(provider).protocol;
+    return request(protocol,settings.base(provider),"models".equals(kind),secret).url(settings.endpoint(provider,kind));
+  }
+
   public static Request.Builder request(String protocol, String base, boolean models, String secret) {
     if (secret.trim().isEmpty()) throw new IllegalArgumentException("请在设置中填写 API Key");
     Request.Builder request = new Request.Builder().url(url(protocol, base, models));

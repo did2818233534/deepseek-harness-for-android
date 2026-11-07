@@ -10,6 +10,7 @@ import dev.guga.updates.UpdateButton;
 
 final class SettingsPages {
   private final MainActivity activity;
+  LinearLayout providerRows;
 
   SettingsPages(MainActivity activity) {
     this.activity = activity;
@@ -19,9 +20,8 @@ final class SettingsPages {
     LinearLayout entries = new LinearLayout(activity);
     entries.setOrientation(LinearLayout.VERTICAL);
     entries.setPadding(activity.dp(4), activity.dp(12), activity.dp(4), activity.dp(20));
-    activity.settingSection(entries, "模型与服务");
-    activity.settingEntry(entries, R.drawable.ic_model, "DeepSeek / Claude", "模型、API Key 与工具设置",
-      true, true, v -> activity.modelSettings(false));
+    activity.settingSection(entries, "模型");
+    activity.settingEntry(entries,R.drawable.ic_model,"模型与服务","管理供应商与聊天可用模型",true,true,v->providers());
     activity.settingSection(entries, "聊天");
     activity.settingEntry(entries, R.drawable.ic_settings, "个性化", "设置适用于所有聊天的自定义指令", true, true, v -> personalization());
     activity.settingSection(entries, "数据管理");
@@ -34,6 +34,38 @@ final class SettingsPages {
     activity.settingEntry(entries, R.drawable.ic_refresh, "应用更新", "自动更新与版本检查",
       false, true, v -> updateSettings());
     activity.showPage("设置", entries);
+  }
+
+  void providers() {
+    Settings settings=new Settings(activity);
+    LinearLayout body=new LinearLayout(activity);body.setOrientation(LinearLayout.VERTICAL);
+    body.setPadding(activity.dp(4),activity.dp(12),activity.dp(4),activity.dp(20));
+    providerRows=new LinearLayout(activity);providerRows.setOrientation(LinearLayout.VERTICAL);body.addView(providerRows);
+    renderProviders(providerRows,settings);
+    activity.showPage("供应商",body);
+  }
+  void renderProviders(LinearLayout body,Settings settings) {
+    body.removeAllViews();
+    for(dev.guga.dsh.settings.ProviderRegistry.Provider provider:settings.providersByEnabled()) {
+      LinearLayout card=activity.row();card.setPadding(activity.dp(16),activity.dp(12),activity.dp(12),activity.dp(12));
+      card.setBackground(activity.ui.surface(UiStyle.SURFACE,24));
+      LinearLayout text=new LinearLayout(activity);text.setOrientation(LinearLayout.VERTICAL);text.setPadding(0,activity.dp(4),activity.dp(12),activity.dp(4));
+      text.addView(activity.label(provider.label,18,activity.ink));
+      TextView status=activity.label(settings.providerEnabled(provider.id)?"已开启":"已关闭",13,settings.providerEnabled(provider.id)?activity.accent:activity.muted);
+      text.addView(status);card.addView(text,new LinearLayout.LayoutParams(0,-2,1));
+      Switch toggle=new Switch(activity);toggle.setChecked(settings.providerEnabled(provider.id));toggle.setContentDescription("启用 "+provider.label);
+      card.addView(toggle,new LinearLayout.LayoutParams(activity.dp(56),activity.dp(56)));
+      card.setContentDescription("配置 "+provider.label);card.setFocusable(true);
+      card.setOnClickListener(v->{settings.saveEditingProvider(provider.id);activity.modelSettings(false);});
+      toggle.setOnCheckedChangeListener((button,enabled)->{
+        try {
+          if(activity.busy)throw new Exception("任务进行中，停止任务后再修改供应商开关");
+          settings.setProviderEnabled(provider.id,enabled);activity.status.setText(settings.model());
+          activity.handler.post(()->renderProviders(body,settings));
+        }catch(Exception error){activity.toast(error.getMessage());activity.handler.post(()->renderProviders(body,settings));}
+      });
+      LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.bottomMargin=activity.dp(12);body.addView(card,lp);
+    }
   }
 
   void appearance(){

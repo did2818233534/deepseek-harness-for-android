@@ -115,7 +115,7 @@ async function main() {
   await ctx.plugin(TokenMeter);
   await ctx.plugin(ToolResultPruner);
   await ctx.plugin(Compaction);
-  configureWebTransport((route,body,signal)=>bridge(route,{...body,sessionId:execution.getStore()?.sessionId},signal));
+  configureWebTransport((route,body,signal)=>{const state=execution.getStore();const config=state?.settings || settings;return bridge(route,{...body,sessionId:state?.sessionId,providerId:config.providerId || config.provider,model:config.model},signal);});
   await ctx.plugin(Web);
 
   const auth = () => ({ baseURL: 'https://api.deepseek.com/v1/tools', resolveApiKey: async () => undefined });
@@ -391,7 +391,7 @@ async function main() {
           if (data.text.length > 100_000)
             throw Error("消息过长，请使用文件导入");
           settings = await bridge("/settings");
-          if (!settings.hasKey) throw Error("请先在设置中填写 API Key");
+          if (!settings.hasKey) throw Error("请先开启供应商、填写 API Key 并选择聊天模型");
           const attachments = prepareAttachments(path.join(root, "..", "workspace"), data.attachments, (state.busy?state.settings:settings).model, true);
           const current=state.busy?state.settings:settings;
           const fallback=imageFallback(current);
