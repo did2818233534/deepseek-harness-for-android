@@ -1,3 +1,4 @@
+import { deliverGuidance } from "./providers/steering.ts";
 import { ConversationArchives } from "./sessions/archives.ts";
 import { fileIdentity } from "./files/file-identity.ts";
 import { cleanupSessionFiles } from "./files/file-cleanup.ts";
@@ -36,6 +37,7 @@ if (!root || !bridgePort || !token)
 let settings: any = {}, active: any = null, revision = 0;
 const agents = new Map();
 const disposers = new Map<string,()=>Promise<void>>();
+const sessionAdapters = new Map<string,AndroidAdapter>();
 const adapterDisposers = new Map<string,()=>void>();
 let archiveWork=0;
 const states = new Map<string, any>();
@@ -200,7 +202,7 @@ async function main() {
   async function releaseAgent(id){
     if(states.get(id)?.busy)throw Error("不能释放正在运行的对话");
     titles.cancel(id);const dispose=disposers.get(id);if(dispose)await dispose();
-    adapterDisposers.get(id)?.();adapterDisposers.delete(id);
+    adapterDisposers.get(id)?.();adapterDisposers.delete(id);sessionAdapters.delete(id);
     disposers.delete(id);agents.delete(id);states.delete(id);
   }
   async function trimAgents(){
@@ -222,7 +224,9 @@ async function main() {
     agents.delete(id);agents.set(id,active); // Recently selected goes to the end.
     const state=stateOf(id);
     if(!state.registered){
-      adapterDisposers.set(id,ctx.llm.registerAdapter(["android-"+id],new AndroidAdapter((route,body,signal,raw)=>bridge(route,{...body,sessionId:id},signal,raw),()=>state.settings,path.join(root,"..","workspace"))));
+      const adapter=new AndroidAdapter((route,body,signal,raw)=>bridge(route,{...body,sessionId:id},signal,raw),()=>state.settings,path.join(root,"..","workspace"));
+      sessionAdapters.set(id,adapter);
+      adapterDisposers.set(id,ctx.llm.registerAdapter(["android-"+id],adapter));
       state.registered=true;
     }
     await trimAgents();
@@ -415,13 +419,19 @@ async function main() {
           void publishStatus().catch(()=>{});
           const steerId=req.url==="/steer"?crypto.randomUUID():undefined;
           if(steerId)state.pendingGuidance.push({id:steerId,text:data.text,attachments});
-          try { target[req.url==="/steer"?"steer":"followup"](
-            createUserMessage({
+          try {
+            const message=createUserMessage({
               content,
               source: { kind: "user", userText:data.text, attachments, ...(steerId?{steerId}:{}) } as any,
-            }),
-          );
-          } catch(error) {restoreImageModel(target);state.busy=false;state.revision++;throw error;}
+            });
+            if(steerId) {
+              const mode=await deliverGuidance(message,m=>target.steer(m),sessionAdapters.get(target.id)?.nativeSteering());
+              if(mode==="native")state.pendingGuidance=state.pendingGuidance.filter(x=>x.id!==steerId);
+            } else target.followup(message);
+          } catch(error) {
+            if(steerId)state.pendingGuidance=state.pendingGuidance.filter(x=>x.id!==steerId);
+            restoreImageModel(target);state.busy=target.status!=="idle";state.revision++;throw error;
+          }
           revision++;
           out = { ok: true };
           break;

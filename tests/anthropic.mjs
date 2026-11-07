@@ -25,6 +25,10 @@ try {
     assert.equal(thinkingConfig('claude-opus-4.7',effort).thinking.type,'adaptive');
   }
   assert.deepEqual(thinkingConfig('custom-alias','high'),{});
+  for(const effort of ['low','medium','high','xhigh','max'])assert.equal(thinkingConfig('claude-opus-5-5',effort).output_config.effort,effort);
+  assert.equal(thinkingConfig('claude-opus-5-5','none').thinking.type,'adaptive');
+  assert.equal(thinkingConfig('claude-sonnet-4-6','max').output_config.effort,'max');
+  assert.equal(thinkingConfig('claude-sonnet-4-6','xhigh').output_config.effort,'high');
   assert.equal(thinkingConfig('claude-fable-5-1','none').thinking.type,'adaptive');
   assert.equal(thinkingConfig('claude-sonnet-5.5','none').thinking.type,'between_tools');
   assert(!request({...options,purpose:'session-title'},settings,dir,[],false).thinking || request({...options,purpose:'session-title'},settings,dir,[],false).thinking.type==='disabled');

@@ -18,6 +18,7 @@ import org.json.*;
 final class ModelSettingsPanel {
   final MainActivity a;
   final boolean quick, advanced;
+  boolean general;
   final Map<String,EditText> endpointFields=new LinkedHashMap<>();
   EditText usageKey;
   LinearLayout fetchEndpointRow;
@@ -41,8 +42,7 @@ final class ModelSettingsPanel {
   EditText seconds;
   LinearLayout durationBox;
   String effort;
-  static final String[] EFFORTS = {"none", "low", "high", "max"};
-  static final String[] EFFORT_LABELS = {"关闭", "低", "高", "最高"};
+  LinearLayout effortBox;
   EditText key, steps;
   Dialog dialog;
   View page;
@@ -103,33 +103,14 @@ final class ModelSettingsPanel {
     state = a.label("", 12, a.muted);
     state.setPadding(a.dp(4), 0, a.dp(4), a.dp(8));
     state.setVisibility(View.GONE);
+    if(quick) generalControls(values);
     if(!quick)box=moreBox;
-    effort = settings.reasoningEffort();
-    effortControl();
-    if (!quick) {
-      timeout = toggle("最长思考时间", values.optBoolean("limitThinking"), "从收到思考内容开始累计本轮思考时间。到时若仍在思考，会停止当前请求，用相同问题和已有工具结果关闭思考重新请求，每轮最多切换一次。正在输出的正文不会中断。部分推理可能丢失，两次请求都可能计费，最终回答仍需等待网络和模型响应。");
-      durationBox = new LinearLayout(a); durationBox.setOrientation(LinearLayout.VERTICAL);
-      box.addView(durationBox);
-      seconds = a.field(durationBox, "思考时间（秒）", String.valueOf(values.optInt("thinkingSeconds",30)), false);
-      seconds.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-      durationBox.setVisibility(timeout.isChecked() ? View.VISIBLE : View.GONE);
-      watch(seconds);
-
-    }
-    search = toggle("联网搜索", settings.webSearch(), "Claude 使用所填基地址的云端 web_search；DeepSeek 默认使用官方接口；接口路径和基础地址可在“更多”修改。中转站不支持、超时或报错时，回退为手机直接访问公开搜索网页。云端搜索可能另行计费，本地搜索也需要网络。");
-    if (!quick) {
-      fetch = toggle("网页读取", settings.webFetch(), "开启后读取网页正文；DeepSeek 使用所填基地址的读取接口，失败时回退手机直接读取；Claude 直接在手机读取公开文本网页。");
-      autoImageModel = toggle("图片自动切换模型", settings.autoImageModel(), "DeepSeek 非视觉模型可临时切换到 Flash。Claude 服务只在当前服务的模型列表中寻找支持图片的模型，绝不跨服务切换；找不到时按文件处理，不猜测画面。");
-      steps = a.field(box, "每轮最多步骤", String.valueOf(values.optInt("maxSteps", 32)), false);
-      steps.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
-
-    }
     if(!quick) {
       box.addView(a.helpTitle("接口路径",13,a.muted,"默认使用官方路径，拼接在所填基础地址之后；已有 /v1 时不会重复添加。只修改路径，不自动改域名。模型、搜索与用量可分别设置。"));
       String[] titles={"对话接口","模型列表接口","云端搜索接口","网页读取接口","用量 / 余额接口"};
       for(int n=0;n<ProviderRegistry.ENDPOINTS.length;n++) {
         String kind=ProviderRegistry.ENDPOINTS[n];LinearLayout fieldBox=new LinearLayout(a);fieldBox.setOrientation(LinearLayout.VERTICAL);box.addView(fieldBox);
-        if(kind.equals("fetch")){fetchEndpointRow=fieldBox;fieldBox.setVisibility(ModelEndpoint.ANTHROPIC.equals(ProviderRegistry.get(protocol).protocol)?View.GONE:View.VISIBLE);}
+        if(kind.equals("fetch")){fetchEndpointRow=fieldBox;}
         EditText field=a.field(fieldBox,titles[n],settings.endpointPath(protocol,kind),false);
         field.setSingleLine(true);endpointFields.put(kind,field);watch(field);
       }
@@ -152,13 +133,45 @@ final class ModelSettingsPanel {
       page = a.showPage(advanced?"更多":ProviderRegistry.get(protocol).label, box);
       a.pageCleanup.put(page, this::close);
       a.pageResume.put(page,this::resumeProfile);
-      watch(key); watch(steps); watch(base); watch(manualModel);
+      watch(key); watch(base); watch(manualModel);
     }
     String cache = settings.modelCatalog(protocol);
     if (!cache.isEmpty()) {
       try { catalog(cache); } catch (Exception ignored) {}
     }
 
+  }
+  void openGeneral() throws Exception {
+    general=true;
+    box=new LinearLayout(a);box.setOrientation(LinearLayout.VERTICAL);
+    box.setPadding(a.dp(4),a.dp(12),a.dp(4),a.dp(20));
+    state=a.label("",12,a.muted);state.setVisibility(View.GONE);
+    generalControls(settings.publicData());
+    box.addView(state);
+    page=a.showPage("通用设置",box);
+    a.pageCleanup.put(page,this::close);
+    watch(steps);
+  }
+  void generalControls(JSONObject values) throws Exception {
+    if(quick){effortBox=new LinearLayout(a);effortBox.setOrientation(LinearLayout.VERTICAL);box.addView(effortBox);refreshEffort();}
+    if (general) {
+      timeout = toggle("最长思考时间", values.optBoolean("limitThinking"), "从收到思考内容开始累计本轮思考时间。到时若仍在思考，会停止当前请求，用相同问题和已有工具结果关闭思考重新请求，每轮最多切换一次。正在输出的正文不会中断。部分推理可能丢失，两次请求都可能计费，最终回答仍需等待网络和模型响应。");
+      durationBox = new LinearLayout(a); durationBox.setOrientation(LinearLayout.VERTICAL);
+      box.addView(durationBox);
+      seconds = a.field(durationBox, "思考时间（秒）", String.valueOf(values.optInt("thinkingSeconds",30)), false);
+      seconds.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+      durationBox.setVisibility(timeout.isChecked() ? View.VISIBLE : View.GONE);
+      watch(seconds);
+
+    }
+    search = toggle("联网搜索", settings.webSearch(), "Claude 使用所填基地址的云端 web_search；DeepSeek 默认使用官方接口；接口路径和基础地址可在“更多”修改。中转站不支持、超时或报错时，回退为手机直接访问公开搜索网页。云端搜索可能另行计费，本地搜索也需要网络。");
+    if (general) {
+      fetch = toggle("网页读取", settings.webFetch(), "开启后读取网页正文；DeepSeek 使用所填基地址的读取接口，失败时回退手机直接读取；Claude 优先使用当前基地址的云端读取工具，失败时回退手机读取公开文本网页。");
+      autoImageModel = toggle("图片自动切换模型", settings.autoImageModel(), "DeepSeek 非视觉模型可临时切换到 Flash。Claude 服务只在当前服务的模型列表中寻找支持图片的模型，绝不跨服务切换；找不到时按文件处理，不猜测画面。");
+      steps = a.field(box, "每轮最多步骤", String.valueOf(values.optInt("maxSteps", 32)), false);
+      steps.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+
+    }
   }
   void styleDropdown(Button button) {
     button.setBackground(a.ui.surface(UiStyle.SURFACE,16));
@@ -191,7 +204,7 @@ final class ModelSettingsPanel {
           protocol=provider.id;settings.saveEditingProvider(protocol);selected=settings.model(protocol);
           editing=true;base.setText(settings.base(protocol));manualModel.setText(selected);key.setText(settings.apiKey(protocol));
           for(String kind:ProviderRegistry.ENDPOINTS)endpointFields.get(kind).setText(settings.endpointPath(protocol,kind));
-          usageKey.setText(settings.usageKey(protocol));fetchEndpointRow.setVisibility(ModelEndpoint.ANTHROPIC.equals(provider.protocol)?View.GONE:View.VISIBLE);editing=false;
+          usageKey.setText(settings.usageKey(protocol));editing=false;
           providerButton.setText(provider.label);models.clear();models.add(selected);names.clear();
           modelButton.setText("选择启用的模型");setState("");
           String cache=settings.modelCatalog(protocol);if(!cache.isEmpty())catalog(cache);
@@ -212,9 +225,7 @@ final class ModelSettingsPanel {
       editing=true;suspended=false;catalogGeneration++;refresh.setEnabled(true);
       base.setText(settings.base(protocol));manualModel.setText(settings.model(protocol));selected=settings.model(protocol);key.setText(settings.apiKey(protocol));
       for(String kind:ProviderRegistry.ENDPOINTS)endpointFields.get(kind).setText(settings.endpointPath(protocol,kind));
-      usageKey.setText(settings.usageKey(protocol));effort=settings.reasoningEffort();
-      JSONObject values=settings.publicData();timeout.setChecked(values.optBoolean("limitThinking"));seconds.setText(String.valueOf(values.optInt("thinkingSeconds",30)));steps.setText(String.valueOf(values.optInt("maxSteps",32)));
-      search.setChecked(settings.webSearch());fetch.setChecked(settings.webFetch());autoImageModel.setChecked(settings.autoImageModel());
+      usageKey.setText(settings.usageKey(protocol));
       models.clear();models.addAll(settings.enabledModels(protocol));names.clear();
       String cache=settings.modelCatalog(protocol);if(!cache.isEmpty())catalog(cache);
       editing=false;setState("");
@@ -265,35 +276,42 @@ final class ModelSettingsPanel {
     state.setText(text);
     state.setVisibility(text == null || text.isEmpty() ? View.GONE : View.VISIBLE);
   }
+  void refreshEffort() {
+    effort=settings.reasoningEffort(protocol,selected);
+    effortBox.removeAllViews();
+    if(settings.reasoningOptions(protocol,selected).levels.length>0)effortControl();
+  }
   void effortControl() {
+    final dev.guga.dsh.settings.ReasoningOptions options=settings.reasoningOptions(protocol,selected);
+    final String[] levels=options.levels;
     LinearLayout panel = new LinearLayout(a); panel.setOrientation(LinearLayout.VERTICAL);
     panel.setPadding(a.dp(16), a.dp(12), a.dp(16), a.dp(8));
     panel.setBackground(a.ui.shape(UiStyle.LOW, 20));
-    TextView title = a.label("思考强度", 16, a.ink); panel.addView(title);
+    TextView title = a.label(options.mode.equals("budget")?"思考预算":"思考强度", 16, a.ink); panel.addView(title);
     TextView value = a.label("", 16, a.accent); value.setGravity(Gravity.CENTER);
     panel.addView(value);
-    SeekBar slider = new EffortSlider(a); slider.setMax(3);
+    SeekBar slider = new EffortSlider(a); slider.setMax(levels.length-1);
     slider.setProgressTintList(android.content.res.ColorStateList.valueOf(a.accent));
     slider.setThumbTintList(android.content.res.ColorStateList.valueOf(a.accent));
-    int initial = java.util.Arrays.asList(EFFORTS).indexOf(effort);
-    slider.setProgress(Math.max(0, initial)); value.setText(EFFORT_LABELS[slider.getProgress()]);
-    slider.setContentDescription("思考强度：" + EFFORT_LABELS[slider.getProgress()]);
+    int initial = java.util.Arrays.asList(levels).indexOf(effort);
+    slider.setProgress(Math.max(0, initial)); value.setText(options.label(levels[slider.getProgress()]));
+    slider.setContentDescription("思考强度：" + options.label(levels[slider.getProgress()]));
     panel.addView(slider, new LinearLayout.LayoutParams(-1, a.dp(48)));
     slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
       public void onStartTrackingTouch(SeekBar bar) {}
       public void onStopTrackingTouch(SeekBar bar) {}
       public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
         if (fromUser) {
-          String previous = effort; effort = EFFORTS[progress];
-          if (!persist()) { effort = previous; bar.setProgress(java.util.Arrays.asList(EFFORTS).indexOf(previous)); return; }
+          String previous = effort; effort = levels[progress];
+          if (!persist()) { effort = previous; bar.setProgress(java.util.Arrays.asList(levels).indexOf(previous)); return; }
         }
-        value.setText(EFFORT_LABELS[progress]);
-        bar.setContentDescription("思考强度：" + EFFORT_LABELS[progress]);
+        value.setText(options.label(levels[progress]));
+        bar.setContentDescription("思考强度：" + options.label(levels[progress]));
       }
     });
     LinearLayout.LayoutParams panelParams = a.spacedControl();
     panelParams.height = LinearLayout.LayoutParams.WRAP_CONTENT;
-    box.addView(panel, panelParams);
+    effortBox.addView(panel, panelParams);
   }
   Switch toggle(String title, boolean checked) {
     return toggle(title, checked, null);
@@ -341,28 +359,26 @@ final class ModelSettingsPanel {
     try {
       if (a.busy) throw new Exception("任务进行中，停止任务后再修改设置");
       JSONObject current = settings.publicData();
-      int count = quick ? current.optInt("maxSteps", 32) : Integer.parseInt(steps.getText().toString());
-      if (count < 1 || count > 128) throw new Exception("步骤数应为 1–128");
-      if (!quick) {
-        int duration = current.optInt("thinkingSeconds",30);
-        if (timeout.isChecked()) {
-          try { duration = Integer.parseInt(seconds.getText().toString()); } catch (NumberFormatException ignored) { duration=0; }
-          if (duration < 1 || duration > 2147483) throw new Exception("请输入 1 至 2147483 之间的秒数");
+      if(general) {
+        int count=Integer.parseInt(steps.getText().toString());
+        int duration=current.optInt("thinkingSeconds",30);
+        if(timeout.isChecked()) {
+          try{duration=Integer.parseInt(seconds.getText().toString());}catch(NumberFormatException error){duration=0;}
         }
-        settings.saveThinkingLimit(timeout.isChecked(),duration);
+        settings.saveGeneral(timeout.isChecked(),duration,search.isChecked(),fetch.isChecked(),autoImageModel.isChecked(),count);
+        setState("");
+        return true;
       }
       String model = quick ? selected : manualModel.getText().toString().trim();
       if (!quick) {
         Map<String,String> paths=new LinkedHashMap<>();
         for(String kind:ProviderRegistry.ENDPOINTS)paths.put(kind,ModelEndpoint.path(endpointFields.get(kind).getText().toString()));
-        settings.saveProfile(protocol, base.getText().toString(), model,key.getText().toString(), !effort.equals("none"), count, false);
+        settings.saveProviderProfile(protocol,base.getText().toString(),model,key.getText().toString());
         settings.saveEndpoints(protocol,paths);settings.saveUsageKey(protocol,usageKey.getText().toString());
       }
       selected = model;
       modelButton.setText(quick ? display(selected) : "选择启用的模型");
-      settings.saveReasoningEffort(effort);
-      settings.saveWeb(search.isChecked(), quick ? settings.webFetch() : fetch.isChecked());
-      if(!quick)settings.saveAutoImageModel(autoImageModel.isChecked());
+      if(quick){if(settings.reasoningOptions(protocol,selected).supports(effort))settings.saveReasoningEffort(protocol,selected,effort);settings.saveWeb(search.isChecked(),settings.webFetch());}
       a.status.setText(settings.model());
       return true;
     } catch (Exception e) { setState(e instanceof NumberFormatException ? "请输入有效的步骤数" : e.getMessage()); return false; }
@@ -423,6 +439,7 @@ final class ModelSettingsPanel {
       for(String id:enabled) {
         count++;
         LinearLayout row=a.row();row.setPadding(a.dp(12),a.dp(8),a.dp(12),a.dp(8));row.setMinimumHeight(a.dp(72));
+        row.setContentDescription("聊天模型 "+provider.id+"/"+id);
         boolean current=provider.id.equals(settings.provider())&&id.equals(settings.model());
         row.setBackground(a.ui.surface(current?UiStyle.SURFACE:Color.TRANSPARENT,12));
         LinearLayout text=new LinearLayout(a);text.setOrientation(LinearLayout.VERTICAL);
@@ -432,7 +449,7 @@ final class ModelSettingsPanel {
         row.setOnClickListener(v->{try {
           if(a.busy)throw new Exception("任务进行中，停止任务后再切换模型");
           settings.selectModel(provider.id,id);protocol=provider.id;selected=id;names.clear();names.putAll(labels);
-          modelButton.setText(display(id));a.status.setText(id);popup.dismiss();
+          modelButton.setText(display(id));a.status.setText(id);refreshEffort();popup.dismiss();
         }catch(Exception error){setState(error.getMessage());}});
         rows.addView(row,new LinearLayout.LayoutParams(-1,-2));
       }

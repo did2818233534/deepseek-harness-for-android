@@ -7,6 +7,21 @@ import java.util.concurrent.CancellationException;
 import dev.guga.dsh.settings.ModelList;
 
 public class WebSearchTests {
+  @Test public void claudeFetchUsesNativeContentAndRejectsToolErrors() throws Exception {
+    String url="https://example.com/article";
+    JSONObject request=WebSearchTools.claudeFetchRequest("claude-opus-5-5",url);
+    assertEquals("web_fetch_20250910",request.getJSONArray("tools").getJSONObject(0).getString("type"));
+    JSONObject result=new JSONObject().put("type","web_fetch_result").put("url",url)
+      .put("content",new JSONObject().put("title","Page").put("source",new JSONObject().put("type","text").put("data","Evidence")));
+    JSONObject block=new JSONObject().put("type","web_fetch_tool_result").put("content",result);
+    JSONObject response=new JSONObject().put("content",new JSONArray().put(block));
+    assertEquals("Page\nEvidence",WebSearchTools.cloudFetchResult(response,url).getString("content"));
+    result.put("url","https://example.com/wrong");
+    try{WebSearchTools.cloudFetchResult(response,url);fail();}catch(java.io.IOException expected){}
+    block.put("content",new JSONObject().put("type","web_fetch_tool_result_error").put("error_code","unavailable"));
+    assertTrue(WebSearchTools.cloudFirst(()->WebSearchTools.cloudFetchResult(response,url),()->new JSONObject().put("fallback",true)).getBoolean("fallback"));
+    try{WebSearchTools.cloudFetchResult(new JSONObject().put("content",new JSONArray()),url);fail();}catch(java.io.IOException expected){}
+  }
   @Test public void cloudFirstFallsBackOnlyOnFailure() throws Exception {
     int[] calls={0};JSONObject cloud=new JSONObject().put("results",new JSONArray());
     assertSame(cloud,WebSearchTools.cloudFirst(()->cloud,()->{calls[0]++;return new JSONObject();}));

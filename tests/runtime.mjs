@@ -12,7 +12,7 @@ fs.mkdirSync(workspace);
 const token = "test-token";
 let environmentSummary="共享环境测试：python 3.12", environmentReads=0;
 let packageTools=false,customInstructions="",limitThinking=false,thinkingSeconds=1;
-let modelName = "test-model", reasoningEffort, autoImageModel=true, cleanupConversationFiles=true;
+let modelName = "deepseek-v4-pro", reasoningEffort, autoImageModel=true, cleanupConversationFiles=true;
 const modelNotices=[];
 let webEnabled = true, webRequests = [], invalidWeb = false;
 let titleRequests=[], titleMode="ok";
@@ -482,7 +482,7 @@ try {
   await until(async () => !(await api('/state')).busy);
   assert(requests.at(-1).messages.some(m => Array.isArray(m.content) && m.content.some(b => b.type === 'image_url')),'Flash receives historical images again');
 
-  modelName = 'test-model';
+  modelName = 'deepseek-v4-pro';
 
   for (const bad of [[{path:'../runtime/runtime-port',mime:'image/png'}], [{path:'备注.txt',mime:'image/png'}]]) {
     const response = await fetch('http://127.0.0.1:'+attachmentPort+'/send', {method:'POST',headers:{authorization:'Bearer '+token},body:JSON.stringify({text:'invalid',attachments:bad})});

@@ -1,3 +1,4 @@
+import { nativeThinking } from "./reasoning.ts";
 import { StringDecoder } from 'node:string_decoder';
 import { attachmentImage } from '../files/attachments.ts';
 import { supportsImages } from './vision.ts';
@@ -10,19 +11,7 @@ export function isAnthropicContextError(error: unknown) {
 // Native Messages transport. Canonical history stays untouched; only this boundary
 // knows about tool_result blocks and signed thinking replay.
 export function thinkingConfig(model: string, effort: string) {
-  const id = model.toLowerCase().replace(/\./g, '-');
-  const adaptive = /^claude-(?:(?:opus|sonnet)-4-[6-9]|(?:opus|sonnet|haiku|fable|mythos)-5|mythos-preview)/.test(id);
-  const always = /^claude-(?:(?:fable|mythos)-|opus-5-5)/.test(id);
-  if (adaptive) {
-    const off = effort === 'none';
-    return {
-      thinking: {type: off && !always ? (id.startsWith('claude-sonnet-5-5') ? 'between_tools' : 'disabled') : 'adaptive'},
-      output_config: {effort: off ? 'low' : effort === 'max' ? (/^claude-opus-(?:4-[6-9]|5)/.test(id) ? 'max' : 'high') : effort},
-    };
-  }
-  // Unknown relay aliases and pre-thinking Claude models keep provider defaults.
-  if (!/^claude-(?:(?:sonnet|opus|haiku)-4|3-7-sonnet)/.test(id) || effort === 'none') return {};
-  return {thinking: {type:'enabled', budget_tokens: effort === 'low' ? 1024 : effort === 'max' ? 8192 : 4096}};
+  return nativeThinking('anthropic',model,effort);
 }
 
 export function anthropicRequest(options, settings, workspace: string, systemExtras: string[], fast: boolean) {

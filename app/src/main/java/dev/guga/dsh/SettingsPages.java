@@ -22,6 +22,7 @@ final class SettingsPages {
     entries.setPadding(activity.dp(4), activity.dp(12), activity.dp(4), activity.dp(20));
     activity.settingSection(entries, "模型");
     activity.settingEntry(entries,R.drawable.ic_model,"模型与服务","管理供应商与聊天可用模型",true,true,v->providers());
+    activity.settingEntry(entries,R.drawable.ic_settings,"通用设置","思考、联网工具与每轮步骤",true,true,v->{try{new ModelSettingsPanel(activity,false).openGeneral();}catch(Exception error){activity.toast(error.getMessage());}});
     activity.settingSection(entries, "聊天");
     activity.settingEntry(entries, R.drawable.ic_settings, "个性化", "设置适用于所有聊天的自定义指令", true, true, v -> personalization());
     activity.settingSection(entries, "数据管理");

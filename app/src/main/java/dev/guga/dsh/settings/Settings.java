@@ -17,9 +17,11 @@ import org.json.JSONObject;
 public final class Settings {
 
   private final SharedPreferences prefs;
+  private final Context context;
   private final android.content.res.Resources defaults;
 
   public Settings(Context c) {
+    context=c.getApplicationContext();
     defaults = c.getResources();
     prefs = c.getSharedPreferences("settings", Context.MODE_PRIVATE);
   }
@@ -84,15 +86,20 @@ public final class Settings {
   }
 
   public void saveProfile(String protocol, String base, String model, String secret, boolean thinking, int steps, boolean activate) throws Exception {
+    saveProfileValues(protocol,base,model,secret,thinking,steps,activate,true);
+  }
+  public void saveProviderProfile(String protocol,String base,String model,String secret) throws Exception {
+    saveProfileValues(protocol,base,model,secret,false,0,false,false);
+  }
+  private void saveProfileValues(String protocol,String base,String model,String secret,boolean thinking,int steps,boolean activate,boolean globals) throws Exception {
     ProviderRegistry.get(protocol);
     base = ModelEndpoint.normalize(base);
     if (model.trim().isEmpty()) throw new Exception("模型名称不能为空");
     SharedPreferences.Editor edit = prefs
       .edit()
             .putString(field(protocol,"base"), base)
-      .putString(field(protocol,"model"), model.trim())
-      .putBoolean("thinking", thinking)
-      .putInt("steps", Math.max(1, Math.min(128, steps)));
+      .putString(field(protocol,"model"), model.trim());
+    if(globals)edit.putBoolean("thinking",thinking).putInt("steps",Math.max(1,Math.min(128,steps)));
     if (activate) edit.putString("provider", protocol).remove("activeModel");
     else {
       // Freeze the active chat selection while editing a provider's draft model ID.
@@ -234,18 +241,32 @@ public final class Settings {
   }
 
 
+  public void saveGeneral(boolean limit,int seconds,boolean search,boolean fetch,boolean autoModel,int steps) throws Exception {
+    if(steps<1 || steps>128)throw new Exception("步骤数应为 1–128");
+    if(seconds<1 || seconds>2147483)throw new Exception("请输入 1 至 2147483 之间的秒数");
+    if(!prefs.edit().putBoolean("limitThinking",limit).putInt("thinkingSeconds",seconds).putBoolean("webSearch",search)
+      .putBoolean("webFetch",fetch).putBoolean("autoImageModel",autoModel).putInt("steps",steps).commit())
+      throw new Exception("设置保存失败");
+  }
+
   public void saveThinkingLimit(boolean enabled,int seconds) {
     prefs.edit().putBoolean("limitThinking",enabled).putInt("thinkingSeconds",seconds).apply();
   }
 
-  public String reasoningEffort() {
-    String value = prefs.getString("reasoningEffort", defaults.getString(R.string.default_reasoning_effort));
-    return ("none".equals(value) || "low".equals(value) || "high".equals(value) || "max".equals(value)) ? value : defaults.getString(R.string.default_reasoning_effort);
+  public ReasoningOptions reasoningOptions(String provider,String model) {
+    return ReasoningOptions.forModel(context,ProviderRegistry.get(provider).protocol,model);
   }
-
-  public void saveReasoningEffort(String value) throws Exception {
-    if (!("none".equals(value) || "low".equals(value) || "high".equals(value) || "max".equals(value))) throw new Exception("思考强度无效");
-    if (!prefs.edit().putString("reasoningEffort", value).commit()) throw new Exception("设置保存失败");
+  private String effortKey(String provider,String model){return "modelEffort."+provider+"."+model;}
+  public String reasoningEffort(){return reasoningEffort(provider(),model());}
+  public String reasoningEffort(String provider,String model) {
+    ReasoningOptions options=reasoningOptions(provider,model);
+    String value=prefs.getString(effortKey(provider,model),prefs.getString("reasoningEffort",options.defaultValue));
+    return options.supports(value)?value:options.defaultValue;
+  }
+  public void saveReasoningEffort(String value) throws Exception {saveReasoningEffort(provider(),model(),value);}
+  public void saveReasoningEffort(String provider,String model,String value) throws Exception {
+    if(!reasoningOptions(provider,model).supports(value))throw new Exception("当前模型不支持此思考档位");
+    if(!prefs.edit().putString(effortKey(provider,model),value).commit())throw new Exception("设置保存失败");
   }
 
   public boolean cleanupConversationFiles(){return prefs.getBoolean("cleanupConversationFiles",true);}

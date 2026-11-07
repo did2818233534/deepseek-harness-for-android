@@ -1,0 +1,94 @@
+[
+  {
+    "provider": "deepseek",
+    "pattern": "^deepseek-(flash|v4(-1)?-(flash|pro)|pro)($|-(latest|[0-9]{8})$)",
+    "levels": [
+      "none",
+      "low",
+      "high",
+      "max"
+    ],
+    "default": "high",
+    "mode": "deepseek"
+  },
+  {
+    "provider": "anthropic",
+    "pattern": "^claude-(opus-5-5|opus-4-[78]|fable-5(-1)?|mythos-(5(-1)?|preview))($|-(latest|[0-9]{8})$)",
+    "levels": [
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    "default": "high",
+    "mode": "adaptive",
+    "always": true
+  },
+  {
+    "provider": "anthropic",
+    "pattern": "^claude-sonnet-5-5($|-(latest|[0-9]{8})$)",
+    "levels": [
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    "default": "high",
+    "mode": "adaptive",
+    "off": "between_tools"
+  },
+  {
+    "provider": "anthropic",
+    "pattern": "^claude-(haiku-5-5|opus-5|sonnet-5)($|-(latest|[0-9]{8})$)",
+    "levels": [
+      "none",
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max"
+    ],
+    "default": "high",
+    "mode": "adaptive"
+  },
+  {
+    "provider": "anthropic",
+    "pattern": "^claude-(opus|sonnet)-4-6($|-(latest|[0-9]{8})$)",
+    "levels": [
+      "none",
+      "low",
+      "medium",
+      "high",
+      "max"
+    ],
+    "default": "high",
+    "mode": "adaptive"
+  },
+  {
+    "provider": "anthropic",
+    "pattern": "^claude-opus-4-5($|-(latest|[0-9]{8})$)",
+    "levels": [
+      "none",
+      "low",
+      "medium",
+      "high"
+    ],
+    "default": "high",
+    "mode": "manual_effort"
+  },
+  {
+    "provider": "anthropic",
+    "pattern": "^claude-((sonnet|opus)-4(-[015])?|haiku-4-5|3-7-sonnet)($|-(latest|[0-9]{8})$)",
+    "levels": [
+      "none",
+      "low",
+      "high",
+      "max"
+    ],
+    "default": "high",
+    "mode": "budget"
+  }
+]

@@ -27,6 +27,7 @@ const bridge=http.createServer(async(req,res)=>{
     res.setHeader('content-type','text/event-stream');
     if(data.system.some(b=>b.text.startsWith('为对话生成简短标题'))){response(res,[{type:'text',text:'Claude 文件测试'}]);return;}
     requests.push(data);
+    if(mode==='unsupported-thinking' && data.thinking){res.statusCode=400;res.end('invalid_request: thinking and output_config not supported');return;}
     if(mode==='broken'){emit(res,'message_start',{message:{usage:{}}});emit(res,'content_block_start',{index:0,content_block:{type:'tool_use',id:'broken',name:'write_file',input:{}}});res.end();return;}
     if(mode==='hold'){emit(res,'message_start',{message:{usage:{}}});emit(res,'content_block_start',{index:0,content_block:{type:'text',text:'等待中'}});return;}
     if(mode==='tool'&&call++===0){response(res,[{type:'thinking',thinking:'先写文件',signature:'test-signature'},{type:'tool_use',id:'write-1',name:'write_file',input:{path:'报告.txt',content:'你好'}}],'tool_use');return;}
@@ -50,5 +51,11 @@ try {
   for(let i=0;i<2;i++){mode='broken';await api('/send',{text:'断流'});state=await settled();assert(state.lastError.includes('提前结束'));assert.equal(tools.length,1);mode='text';await api('/send',{text:'重试'});state=await settled();assert.equal(state.lastError,'');}
   mode='hold';await api('/send',{text:'停止测试'});await until(()=>requests.at(-1)?.messages.at(-1)?.content.some(b=>b.text==='停止测试'));await api('/cancel');state=await settled();
   mode='text';await api('/send',{text:'取消后继续'});state=await settled();assert.equal(state.lastError,'');assert.equal(tools.length,1);
+  mode='unsupported-thinking';
+  for(let n=0;n<2;n++) {
+    const before=requests.length;await api('/send',{text:'中转站忽略不支持的思考设置'});state=await settled();
+    assert.equal(state.lastError,'');assert.equal(requests.length,before+2);
+    assert(requests.at(-2).thinking);assert(!requests.at(-1).thinking);assert(!requests.at(-1).output_config);
+  }
   console.log('PASS: Claude through full harness loop, tool execution/replay, signed thinking restart, broken-stream retry twice, cancellation and recovery');
 } finally {await stop();bridge.closeAllConnections();await new Promise(r=>bridge.close(r));fs.rmSync(dir,{recursive:true,force:true});}

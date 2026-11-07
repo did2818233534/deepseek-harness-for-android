@@ -259,9 +259,10 @@ final class NativeBridge extends NanoHTTPD {
         return providerWeb(provider,search,body,session);
       },()->{guard.check();return WebSearchTools.localSearch(web,query,count,session);});
     }
-    // Claude source-page reading is local; never borrow another provider's credentials.
-    if(ModelEndpoint.DEEPSEEK.equals(protocol))return WebSearchTools.cloudFirst(()->providerWeb(provider,false,body,session),()->{guard.check();return WebSearchTools.localFetch(web,body.getString("url"),session);});
-    return WebSearchTools.localFetch(web,body.getString("url"),session);
+    return WebSearchTools.cloudFirst(()-> {
+      if(ModelEndpoint.ANTHROPIC.equals(protocol))return WebSearchTools.claudeFetch(api,settings,provider,model,body.getString("url"),session,guard);
+      return providerWeb(provider,false,body,session);
+    },()->{guard.check();return WebSearchTools.localFetch(web,body.getString("url"),session);});
   }
   JSONObject providerWeb(String provider,boolean search,JSONObject body,String session) throws Exception {
     String secret=settings.apiKey(provider);

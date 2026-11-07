@@ -1,4 +1,6 @@
 import crypto from "node:crypto";
+import { nativeThinking, thinkingRejected } from "./reasoning.ts";
+import type { NativeSteering } from "./steering.ts";
 import { anthropicRequest, anthropicStream, isAnthropicContextError } from "./anthropic.ts";
 import { supportsImages } from "./vision.ts";
 import { attachmentImage } from "../files/attachments.ts";
@@ -23,6 +25,22 @@ export class AndroidAdapter extends LlmAdapter {
       ...(known ? {context: {contextWindow: 1_000_000}} : {}),
       defaultMaxTokens: effort === "none" ? 8192 : effort === "max" ? 131072 : 65536,
     };
+  }
+  nativeSteering(): NativeSteering | undefined {
+    // Both current transports are request/response APIs. Claude Managed Agents
+    // is a separate engine; Messages thread IDs are NOT live agent session IDs.
+    // See docs/claude.md for the official capability audit.
+    return undefined;
+  }
+  private async modelResponse(body,signal) {
+    try { return await this.bridge("/model",body,signal,true); }
+    catch(error) {
+      signal?.throwIfAborted();
+      if(!thinkingRejected(error) || (!body.thinking&&!body.output_config&&!body.reasoning_effort))throw error;
+      const {thinking,output_config,reasoning_effort,...fallback}=body;
+      // No equivalent universal effort control: let the server choose its default.
+      return this.bridge("/model",fallback,signal,true);
+    }
   }
   private thinkingBudgets = new WeakMap<object, {remaining:number, fast:boolean}>();
   async *stream(options) {
@@ -93,7 +111,7 @@ export class AndroidAdapter extends LlmAdapter {
     options.signal?.throwIfAborted();
     options.signal?.addEventListener("abort",cancel,{once:true});
     try {
-      const response=await this.bridge("/model",body,options.signal,true);
+      const response=await this.modelResponse(body,options.signal);
       if(!response.body) throw Error("Model returned no stream");
       yield* anthropicStream(response.body,settings,options.signal);
     } catch(error) {
@@ -157,9 +175,7 @@ export class AndroidAdapter extends LlmAdapter {
       }));
     if(fast)messages.push({role:"user",content:"请根据原问题及已经取得的工具结果直接给出回答；资料不足时请明确说明，避免重复执行已经完成的操作。"});
     const configuredEffort = fast || options.purpose === "session-title" ? "none" : this.settings().reasoningEffort;
-    const effort = ["none", "low", "high", "max"].includes(configuredEffort) ? configuredEffort : "high";
-    body.thinking = {type: effort === "none" ? "disabled" : "enabled"};
-    if (effort !== "none") body.reasoning_effort = effort;
+    Object.assign(body,nativeThinking("deepseek",options.model,configuredEffort || "high"));
     const requestId=crypto.randomUUID();
     body.androidRequestId=requestId;
     body.androidProviderId=this.settings().providerId || this.settings().provider || "deepseek";
@@ -172,7 +188,7 @@ export class AndroidAdapter extends LlmAdapter {
     try {
     let response;
     try {
-      response = await this.bridge("/model", body, options.signal, true);
+      response = await this.modelResponse(body,options.signal);
     } catch (error) {
       if (isContextWindowExceededError(error instanceof Error ? error.message : String(error)))
         throw new HarnessError("模型上下文已满", "CONTEXT_WINDOW_EXCEEDED", {cause:error});
