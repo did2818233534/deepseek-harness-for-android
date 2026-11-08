@@ -109,7 +109,7 @@ final class ModelSettingsPanel {
     if(quick) generalControls(values);
     if(!quick)box=moreBox;
     if(!quick) {
-      box.addView(a.helpTitle("接口路径",13,a.muted,"默认使用官方路径，拼接在所填基础地址之后；已有 /v1 时不会重复添加。只修改路径，不自动改域名。模型、搜索与用量可分别设置。"));
+      box.addView(a.standaloneHelp("接口路径",13,a.muted,"默认使用官方路径，拼接在所填基础地址之后；已有 /v1 时不会重复添加。只修改路径，不自动改域名。模型、搜索与用量可分别设置。"));
       String[] titles={"对话接口","模型列表接口","云端搜索接口","网页读取接口","用量 / 余额接口"};
       for(int n=0;n<ProviderRegistry.ENDPOINTS.length;n++) {
         String kind=ProviderRegistry.ENDPOINTS[n];LinearLayout fieldBox=new LinearLayout(a);fieldBox.setOrientation(LinearLayout.VERTICAL);box.addView(fieldBox);
@@ -117,7 +117,7 @@ final class ModelSettingsPanel {
         EditText field=a.field(fieldBox,titles[n],settings.endpointPath(protocol,kind),false);
         field.setSingleLine(true);endpointFields.put(kind,field);watch(field);
       }
-      box.addView(a.helpTitle("用量查询认证",13,a.muted,"Claude 官方用量接口需要 Admin API Key，普通聊天密钥通常无权限。可另填查询密钥；留空使用当前供应商的 API Key。中转站以其兼容的接口和权限为准。默认查询最近 24 小时，用量响应原样展示。"));
+      box.addView(a.standaloneHelp("用量查询认证",13,a.muted,"Claude 官方用量接口需要 Admin API Key，普通聊天密钥通常无权限。可另填查询密钥；留空使用当前供应商的 API Key。中转站以其兼容的接口和权限为准。默认查询最近 24 小时，用量响应原样展示。"));
       usageKey=a.secretField(box,"用量查询 API Key（可选）",settings.usageKey(protocol));watch(usageKey);
       usageButton=a.button("查询用量 / 余额",v->queryUsage());box.addView(usageButton,a.spacedControl());
       resetButton=a.button("恢复当前供应商初始设置",v->resetDefaults());box.addView(resetButton,a.spacedControl());
@@ -230,7 +230,12 @@ final class ModelSettingsPanel {
   }
   void showDropdown(View anchor, LinearLayout rows, int count) {
     ScrollView scroll=new ScrollView(a); scroll.addView(rows);
-    popup=new PopupWindow(scroll,anchor.getWidth(),Math.min(a.dp(320),a.dp(16+count*72)),true);
+    // Measure empty content before anchoring so Android can place it above a low input.
+    rows.measure(View.MeasureSpec.makeMeasureSpec(anchor.getWidth(),View.MeasureSpec.EXACTLY),
+      View.MeasureSpec.makeMeasureSpec(0,View.MeasureSpec.UNSPECIFIED));
+    int desired=count==0 ? rows.getMeasuredHeight() : a.dp(16+count*72);
+    popup=new PopupWindow(scroll,anchor.getWidth(),Math.min(a.dp(320),desired),true);
+    popup.setHeight(Math.min(popup.getHeight(),popup.getMaxAvailableHeight(anchor,a.dp(8))));
     popup.setBackgroundDrawable(a.ui.shape(UiStyle.BACKGROUND,16));
     popup.setElevation(a.dp(8)); popup.setOutsideTouchable(true);
     popup.setInputMethodMode(PopupWindow.INPUT_METHOD_NOT_NEEDED);
@@ -345,9 +350,10 @@ final class ModelSettingsPanel {
     else {
       LinearLayout row=a.row();row.setPadding(a.dp(16),0,a.dp(16),0);
       row.setBackground(a.ui.shape(UiStyle.LOW,16));
-      row.addView(a.helpTitle(title,16,a.ink,detail),new LinearLayout.LayoutParams(0,-2,1));
+      row.addView(a.helpTitle(title,16,a.ink,""),new LinearLayout.LayoutParams(0,-2,1));
       toggle.setText("");toggle.setContentDescription(title);toggle.setPadding(0,0,0,0);toggle.setBackgroundColor(Color.TRANSPARENT);
       row.addView(toggle,new LinearLayout.LayoutParams(a.dp(MainActivity.SETTINGS_ACTION_DP),a.dp(48)));
+      a.addHelp(row,title,detail);
       row.setOnClickListener(v->toggle.toggle());box.addView(row,a.spacedControl());
     }
     toggle.setOnCheckedChangeListener((button, value) -> {
@@ -434,7 +440,19 @@ final class ModelSettingsPanel {
         rows.addView(row,new LinearLayout.LayoutParams(-1,-2));
       }
     }
-    if(count==0){rows.addView(a.label("请启用供应商并选择聊天模型",14,a.muted));count=1;}
+    if(count==0){
+      rows.setPadding(a.dp(20),a.dp(16),a.dp(20),a.dp(12));
+      TextView title=a.label("还没有可选模型",16,a.ink);
+      rows.addView(title);
+      TextView hint=a.label("前往模型与服务，开启供应商和想使用的模型。",14,a.muted);
+      hint.setPadding(0,a.dp(8),0,a.dp(12));rows.addView(hint);
+      Button configure=a.button("去设置",v->{
+        popup.dismiss();
+        if(dialog!=null)dialog.dismiss();
+        a.settingsPages.providers();
+      });
+      rows.addView(configure,new LinearLayout.LayoutParams(-1,a.dp(48)));
+    }
     showDropdown(selector,rows,count);
   }
 

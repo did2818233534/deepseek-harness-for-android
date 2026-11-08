@@ -202,6 +202,61 @@ public class ClaudeSettingsTests {
       if(isolate) HarnessService.nodeStarted=started;
     }
   }
+  @Test public void emptyModelHintOpensSettingsAndReturnsRepeatedly() throws Exception {
+    var i=InstrumentationRegistry.getInstrumentation();var c=i.getTargetContext();
+    var prefs=c.getSharedPreferences("settings",0);
+    assertFalse(prefs.contains("key"));assertFalse(prefs.contains("anthropic.key"));
+    var settings=new Settings(c);
+    boolean ds=settings.providerEnabled("deepseek"),cl=settings.providerEnabled("anthropic"),started=HarnessService.nodeStarted;
+    HarnessService.nodeStarted=true;
+    settings.setProviderEnabled("deepseek",false);settings.setProviderEnabled("anthropic",false);
+    MainActivity a=(MainActivity)i.startActivitySync(new Intent(c,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+    ModelSettingsPanel[] panel={null};
+    try {
+      i.runOnMainSync(()->{a.visible=false;a.busy=false;a.settings();});i.waitForIdleSync();
+      ProviderVisualTests.capture(a,"settings-help-alignment.png");
+      for(int repeat=0;repeat<2;repeat++) {
+        i.runOnMainSync(()->{
+          View help=GeneralSettingsTests.findDescription(a.currentPage,"模型与服务说明");
+          View other=GeneralSettingsTests.findDescription(a.currentPage,"通用设置说明");
+          int[] first=new int[2],second=new int[2];help.getLocationOnScreen(first);other.getLocationOnScreen(second);
+          assertEquals(first[0],second[0]);
+          var row=(android.view.ViewGroup)help.getParent();assertSame(help,row.getChildAt(row.getChildCount()-1));
+          assertTrue(help.getLeft()>row.getChildAt(row.getChildCount()-2).getLeft());
+          assertEquals(a.dp(48),help.getWidth());assertEquals(a.dp(48),help.getHeight());
+          assertEquals(a.dp(96),row.getWidth());assertEquals(a.dp(48),row.getHeight());
+          touch(help,20,20);
+        });i.waitForIdleSync();
+        i.runOnMainSync(()->{
+          var dialog=(android.app.AlertDialog)a.dialogs.peek();assertTrue(dialog.isShowing());
+          touch(dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE),20,20);
+        });i.waitForIdleSync();assertTrue(a.dialogs.isEmpty());assertNotNull(a.currentPage);
+        View settingsPage=a.currentPage;
+        i.runOnMainSync(()->touch(GeneralSettingsTests.findDescription(a.currentPage,"打开模型与服务"),20,20));
+        i.waitForIdleSync();assertNotSame(settingsPage,a.currentPage);
+        i.runOnMainSync(a::onBackPressed);i.waitForIdleSync();assertSame(settingsPage,a.currentPage);
+      }
+      i.runOnMainSync(a::onBackPressed);i.waitForIdleSync();
+      for(int repeat=0;repeat<2;repeat++) {
+        i.runOnMainSync(()->{a.visible=false;a.busy=false;try{panel[0]=new ModelSettingsPanel(a,true);panel[0].open();}catch(Exception e){throw new AssertionError(e);}});
+        i.waitForIdleSync();
+        i.runOnMainSync(()->touch(panel[0].modelButton,20,20));i.waitForIdleSync();
+        if(repeat==0)ProviderVisualTests.capture(a,"empty-model-hint.png");
+        i.runOnMainSync(()->{
+          var rows=(android.widget.LinearLayout)((android.widget.ScrollView)panel[0].popup.getContentView()).getChildAt(0);
+          assertEquals("还没有可选模型",((android.widget.TextView)rows.getChildAt(0)).getText().toString());
+          assertEquals(3,rows.getChildCount());assertTrue(panel[0].popup.getHeight()>0);assertTrue(panel[0].popup.getHeight()<=a.dp(320));
+          touch(rows.getChildAt(2),20,20);
+        });i.waitForIdleSync();
+        assertFalse(panel[0].popup.isShowing());assertFalse(panel[0].dialog.isShowing());assertNotNull(a.currentPage);
+        i.runOnMainSync(a::onBackPressed);i.waitForIdleSync();
+        assertSame(a.chatRoot,a.currentPage);
+      }
+    }finally{
+      i.runOnMainSync(()->{if(panel[0]!=null)panel[0].close();a.finish();});
+      settings.setProviderEnabled("deepseek",ds);settings.setProviderEnabled("anthropic",cl);HarnessService.nodeStarted=started;
+    }
+  }
   static android.widget.EditText findEdit(View view,String text) {
     if(view instanceof android.widget.EditText && text.contentEquals(((android.widget.EditText)view).getText()))return (android.widget.EditText)view;
     if(view instanceof android.view.ViewGroup){var group=(android.view.ViewGroup)view;for(int i=0;i<group.getChildCount();i++){var found=findEdit(group.getChildAt(i),text);if(found!=null)return found;}}

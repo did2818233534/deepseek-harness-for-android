@@ -731,7 +731,7 @@ public final class MainActivity extends Activity {
   static final int SETTINGS_ACTION_DP=56;
   LinearLayout standaloneHelp(String title,int size,int color,String detail){
     LinearLayout heading=helpTitle(title,size,color,detail);
-    heading.setPaddingRelative(0,0,dp(16)+dp(SETTINGS_ACTION_DP),0);
+    heading.setPaddingRelative(0,0,dp(16),0);
     return heading;
   }
   LinearLayout helpTitle(String title, int size, int color, String detail) {
@@ -741,17 +741,20 @@ public final class MainActivity extends Activity {
     text.setIncludeFontPadding(false);
     text.setGravity(Gravity.CENTER_VERTICAL);
     heading.addView(text,new LinearLayout.LayoutParams(0,-2,1));
-    if(!detail.isEmpty()) {
-      ImageButton help=icon(R.drawable.ic_help,title+"说明",v -> {
-        AlertDialog dialog=new AlertDialog.Builder(this).setTitle(title).setMessage(detail)
-          .setPositiveButton("知道了",null).create();
-        dialog.show(); styleDialog(dialog,false);
-      });
-      help.setPadding(dp(15),dp(15),dp(15),dp(15));
-      help.setImageTintList(android.content.res.ColorStateList.valueOf(muted));
-      heading.addView(help,new LinearLayout.LayoutParams(dp(48),dp(48)));
-    }
+    addHelp(heading,title,detail);
     return heading;
+  }
+
+  void addHelp(LinearLayout row,String title,String detail) {
+    if(detail==null || detail.isEmpty())return;
+    ImageButton help=icon(R.drawable.ic_help,title+"说明",v -> {
+      AlertDialog dialog=new AlertDialog.Builder(this).setTitle(title).setMessage(detail)
+        .setPositiveButton("知道了",null).create();
+      dialog.show();styleDialog(dialog,false);
+    });
+    help.setPadding(dp(15),dp(15),dp(15),dp(15));
+    help.setImageTintList(android.content.res.ColorStateList.valueOf(muted));
+    row.addView(help,new LinearLayout.LayoutParams(dp(48),dp(48)));
   }
 
   void settingEntry(LinearLayout body, int glyph, String title, String detail,
@@ -774,14 +777,27 @@ public final class MainActivity extends Activity {
     LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(26), dp(26));
     iconParams.rightMargin = dp(20);
     entry.addView(symbol, iconParams);
-    entry.addView(helpTitle(title,18,ink,detail), new LinearLayout.LayoutParams(0, -2, 1));
-    ImageView arrow = new ImageView(this);
-    arrow.setImageResource(R.drawable.ic_chevron_down);
-    arrow.setImageTintList(android.content.res.ColorStateList.valueOf(muted));
-    arrow.setRotation(-90);
-    arrow.setScaleType(ImageView.ScaleType.CENTER);
-    arrow.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-    entry.addView(arrow,new LinearLayout.LayoutParams(dp(SETTINGS_ACTION_DP),dp(48)));
+    entry.addView(helpTitle(title,18,ink,""), new LinearLayout.LayoutParams(0, -2, 1));
+    // Two square touch targets; only navigation menus use the divided action block.
+    FrameLayout actions=new FrameLayout(this);
+    GradientDrawable actionSurface=ui.shape(UiStyle.LOW,12);
+    actionSurface.setStroke(dp(1),UiStyle.color(0xFFE1DBE8));
+    actions.setBackground(actionSurface);actions.setClipToOutline(true);
+    LinearLayout cells=row();
+    ImageButton arrow=icon(R.drawable.ic_chevron_down,"打开"+title,click);
+    arrow.setRotation(-90);arrow.setImageTintList(android.content.res.ColorStateList.valueOf(muted));
+    arrow.setBackground(ui.surface(Color.TRANSPARENT,0));
+    cells.addView(arrow,new LinearLayout.LayoutParams(dp(48),dp(48)));
+    addHelp(cells,title,detail);
+    if(cells.getChildCount()>1)cells.getChildAt(1).setBackground(ui.surface(Color.TRANSPARENT,0));
+    actions.addView(cells,new FrameLayout.LayoutParams(-1,-1));
+    if(!detail.isEmpty()) {
+      View divider=new View(this);divider.setBackgroundColor(UiStyle.color(0xFFE1DBE8));
+      divider.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+      FrameLayout.LayoutParams line=new FrameLayout.LayoutParams(dp(1),-1,Gravity.CENTER);
+      actions.addView(divider,line);
+    }
+    entry.addView(actions,new LinearLayout.LayoutParams(dp(detail.isEmpty()?48:96),dp(48)));
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
     lp.bottomMargin = dp(4);
     body.addView(entry, lp);
@@ -974,7 +990,7 @@ public final class MainActivity extends Activity {
     LinearLayout setting = row();
     setting.setPadding(dp(16),dp(12),dp(16),dp(12));
     setting.setBackground(shape(UiStyle.SURFACE,24));
-    setting.addView(helpTitle("删除对话时清理关联文件",16,ink,"默认开启。删除对话时，同时清理它导入或生成的文件；其他对话仍引用的文件会保留。关闭后仅删除聊天记录。已导出到手机其他位置的文件不受影响。"),new LinearLayout.LayoutParams(0,-2,1));
+    setting.addView(helpTitle("删除对话时清理关联文件",16,ink,""),new LinearLayout.LayoutParams(0,-2,1));
     Settings prefs=new Settings(this);
     Switch toggle=new Switch(this);
     toggle.setContentDescription("删除对话时清理关联文件");
@@ -984,6 +1000,7 @@ public final class MainActivity extends Activity {
       catch(Exception e){toggle.setChecked(prefs.cleanupConversationFiles());toast(e.getMessage());}
     });
     setting.addView(toggle,new LinearLayout.LayoutParams(dp(SETTINGS_ACTION_DP),dp(48)));
+    addHelp(setting,"删除对话时清理关联文件","默认开启。删除对话时，同时清理它导入或生成的文件；其他对话仍引用的文件会保留。关闭后仅删除聊天记录。已导出到手机其他位置的文件不受影响。");
     LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.bottomMargin=dp(16);
     body.addView(setting,lp);
   }

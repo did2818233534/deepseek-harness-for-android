@@ -132,3 +132,7 @@ git push -u origin feat/claude-relay-support
 - 没有已确认原生能力且没有等价通用回退的可选配置不发送。扩展新供应商时需显式声明能力，不能只因模型名包含 Claude 或兼容 OpenAI 就猜测支持。
 
 依据：[DeepSeek 思考档位](https://api-docs.deepseek.com/guides/thinking_mode/)、[Claude Effort](https://platform.claude.com/docs/en/build-with-claude/effort)、[Claude Web Fetch](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-fetch-tool)。
+
+### 菜单与帮助布局回归
+
+菜单操作格与空模型提示更新后，14 项 Android 设置层测试通过，包含 48×48dp 操作格尺寸、问号同列对齐、说明关闭、箭头跳转、空模型设置入口和重复返回。截图检查确认小屏幕下提示按钮完整可见；原生核心仍按上述方式隔离，此结果不代表真机联网对话验证。帮助对齐白名单保持为空，只有用户明确指定才可添加。

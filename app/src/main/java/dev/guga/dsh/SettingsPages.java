@@ -124,11 +124,12 @@ final class SettingsPages {
     LinearLayout update = activity.row();
     update.setPadding(activity.dp(16), activity.dp(16), activity.dp(16), activity.dp(16));
     update.setBackground(activity.shape(UiStyle.SURFACE, 24));
-    update.addView(activity.helpTitle("自动更新",18,activity.ink,"开启后，每天首次进入应用时检查并下载更新，当天最多自动检查一次。连接失败不会弹出警告；手动检查不受每日次数限制，并会显示结果。安装可能需要系统授权与确认。"),new LinearLayout.LayoutParams(0,-2,1));
+    update.addView(activity.helpTitle("自动更新",18,activity.ink,""),new LinearLayout.LayoutParams(0,-2,1));
     Switch autoUpdate=new Switch(activity); autoUpdate.setContentDescription("自动更新");
     autoUpdate.setChecked(ReleaseUpdater.isAutomaticEnabled(activity));
     autoUpdate.setOnCheckedChangeListener((v, checked) -> ReleaseUpdater.setAutomaticEnabled(activity, checked));
     update.addView(autoUpdate,new LinearLayout.LayoutParams(activity.dp(MainActivity.SETTINGS_ACTION_DP),activity.dp(48)));
+    activity.addHelp(update,"自动更新","开启后，每天首次进入应用时检查并下载更新，当天最多自动检查一次。连接失败不会弹出警告；手动检查不受每日次数限制，并会显示结果。安装可能需要系统授权与确认。");
     entries.addView(update);
     UpdateButton checkUpdate=new UpdateButton(activity);
     checkUpdate.setDetailsHandler(message -> {
