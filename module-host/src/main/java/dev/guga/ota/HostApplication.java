@@ -7,11 +7,13 @@ import android.content.Context;
 public final class HostApplication extends Application {
  @Override protected void attachBaseContext(Context base) {
   super.attachBaseContext(base);
-  ModuleRuntime.start(base);
+  if(!isRestartProcess())ModuleRuntime.start(base);
  }
+ private boolean isRestartProcess(){return getProcessName().endsWith(":module_restart");}
  @Override public ClassLoader getClassLoader(){return ModuleRuntime.loader(super.getClassLoader());}
  @Override public void onCreate() {
   super.onCreate();
+  if(isRestartProcess())return;
   android.os.Handler handler=new android.os.Handler(getMainLooper());
   Runnable healthy=()->ModuleRuntime.healthy(this);
   registerActivityLifecycleCallbacks(new ActivityLifecycleCallbacks() {
