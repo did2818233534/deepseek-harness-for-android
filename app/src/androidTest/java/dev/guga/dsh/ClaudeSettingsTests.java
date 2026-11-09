@@ -223,8 +223,8 @@ public class ClaudeSettingsTests {
           assertEquals(first[0],second[0]);
           var row=(android.view.ViewGroup)help.getParent();assertSame(help,row.getChildAt(row.getChildCount()-1));
           assertTrue(help.getLeft()>row.getChildAt(row.getChildCount()-2).getLeft());
-          assertEquals(a.dp(48),help.getWidth());assertEquals(a.dp(48),help.getHeight());
-          assertEquals(a.dp(96),row.getWidth());assertTrue(row.getHeight()>=a.dp(64));
+          assertEquals(Math.round(a.dp(64)*4f/5f),help.getWidth());assertEquals(a.dp(48),help.getHeight());
+          assertEquals(2*Math.round(a.dp(64)*4f/5f),row.getWidth());assertTrue(row.getHeight()>=a.dp(64));
           touch(help,20,20);
         });i.waitForIdleSync();
         i.runOnMainSync(()->{

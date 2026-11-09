@@ -782,13 +782,17 @@ public final class MainActivity extends Activity {
     entry.addView(menuTitle, new LinearLayout.LayoutParams(0, -2, 1));
     // Transparent action areas share the menu surface; only vertical rules separate them.
     FrameLayout actions=new FrameLayout(this);
+    int actionWidth=Math.round(dp(64)*4f/5f);
     LinearLayout cells=row();
     ImageButton arrow=icon(R.drawable.ic_chevron_down,"打开"+title,click);
     arrow.setRotation(-90);arrow.setImageTintList(android.content.res.ColorStateList.valueOf(muted));
     arrow.setBackground(ui.surface(Color.TRANSPARENT,0));
-    cells.addView(arrow,new LinearLayout.LayoutParams(dp(48),dp(48)));
+    cells.addView(arrow,new LinearLayout.LayoutParams(actionWidth,dp(48)));
     addHelp(cells,title,detail);
-    if(cells.getChildCount()>1)cells.getChildAt(1).setBackground(ui.surface(Color.TRANSPARENT,0));
+    if(cells.getChildCount()>1){
+      cells.getChildAt(1).setBackground(ui.surface(Color.TRANSPARENT,0));
+      cells.getChildAt(1).getLayoutParams().width=actionWidth;
+    }
     actions.addView(cells,new FrameLayout.LayoutParams(-1,-1));
     for(int gravity : detail.isEmpty() ? new int[]{Gravity.START} : new int[]{Gravity.START,Gravity.CENTER}) {
       View divider=new View(this);divider.setBackgroundColor(UiStyle.color(0xFFE1DBE8));
@@ -796,7 +800,7 @@ public final class MainActivity extends Activity {
       FrameLayout.LayoutParams line=new FrameLayout.LayoutParams(dp(1),-1,gravity);
       actions.addView(divider,line);
     }
-    entry.addView(actions,new LinearLayout.LayoutParams(dp(detail.isEmpty()?48:96),-1));
+    entry.addView(actions,new LinearLayout.LayoutParams(actionWidth*(detail.isEmpty()?1:2),-1));
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
     lp.bottomMargin = dp(4);
     body.addView(entry, lp);

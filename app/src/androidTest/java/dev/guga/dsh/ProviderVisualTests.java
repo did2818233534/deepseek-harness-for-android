@@ -41,7 +41,7 @@ public class ProviderVisualTests {
             var cells=(android.view.ViewGroup)help.getParent();
             var actions=(android.view.ViewGroup)cells.getParent();
             var entry=(android.view.ViewGroup)actions.getParent();
-            assertEquals(a.dp(48),help.getWidth());assertEquals(help.getWidth(),cells.getChildAt(0).getWidth());
+            assertEquals(Math.round(entry.getHeight()*4f/5f),help.getWidth());assertEquals(help.getWidth(),cells.getChildAt(0).getWidth());
             assertEquals(entry.getHeight(),actions.getHeight());assertEquals(0,actions.getTop());
             assertEquals(entry.getWidth(),actions.getRight());
             for(int n=1;n<actions.getChildCount();n++) {
