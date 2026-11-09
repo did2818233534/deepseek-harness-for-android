@@ -21,14 +21,22 @@ final class ModuleUpdatePanel {
  final Runnable poll;
  ModuleUpdatePanel(MainActivity a){activity=a;poll=()->{if(!activity.isDestroyed()&&activity.settingsPages.modulePanel==this)refresh(null);};}
  void addTo(LinearLayout entries) {
-  activity.settingSection(entries,"动态模块更新");
+  LinearLayout card=new LinearLayout(activity);card.setOrientation(LinearLayout.VERTICAL);
+  card.setBackground(activity.shape(UiStyle.LOW,24));
+  card.setPadding(0,activity.dp(12),0,activity.dp(16));
+  TextView caption=activity.label("当前版本",14,activity.muted);
+  caption.setPadding(activity.dp(20),0,0,0);card.addView(caption);
+  entries.addView(card,new LinearLayout.LayoutParams(-1,-2));
   LinearLayout heading=activity.row();
-  heading.addView(activity.label("业务模块",16,activity.ink),new LinearLayout.LayoutParams(0,-2,1));
+  heading.setPadding(activity.dp(20),0,0,0);
+  heading.addView(activity.label(BuildConfig.VERSION_NAME.replace("-claude-test",""),28,activity.ink),new LinearLayout.LayoutParams(0,-2,1));
   more=activity.icon(R.drawable.ic_file_more,"更新选项",v->showOptions());
   heading.addView(more,new LinearLayout.LayoutParams(activity.dp(48),activity.dp(48)));
-  activity.addHelp(heading,"业务模块","选择更新文件后，应用会自动校验并准备。准备完成后可立即重启应用，也可稍后在下次冷启动时自动启用；聊天和设置保留。右侧更多菜单可重新选择文件或恢复内置版本。系统权限、原生库或宿主资源变更仍需安装完整 APK。");
-  entries.addView(heading);
-  status=activity.label(ModuleRuntime.description(activity),14,activity.muted);entries.addView(status);
+  activity.addHelp(heading,"更新说明","选择更新文件后，应用会自动校验并准备。准备完成后可立即重启应用，也可稍后在下次冷启动时自动启用；聊天和设置保留。右侧更多菜单可重新选择文件或恢复内置版本。系统权限、原生库或宿主资源变更仍需安装完整 APK。");
+  heading.getChildAt(heading.getChildCount()-1).getLayoutParams().width=Math.round(activity.dp(64)*4f/5f);
+  card.addView(heading);
+  status=activity.label("",14,activity.muted);
+  status.setPadding(activity.dp(20),activity.dp(4),activity.dp(20),0);card.addView(status);
   choose=activity.button("导入更新",v->{
    if(ModuleRuntime.isRunning())return;
    if(ModuleRuntime.hasPending(activity))applyUpdate();else pickFile();
@@ -73,7 +81,8 @@ final class ModuleUpdatePanel {
   boolean running=ModuleRuntime.isRunning();
   handler.removeCallbacks(poll);if(running)handler.postDelayed(poll,500);
   boolean pending=!running&&ModuleRuntime.hasPending(activity);
-  status.setText(error!=null?error:running?"正在校验并准备更新…":ModuleRuntime.description(activity));
+  String message=error!=null?error:running?"正在校验并准备更新…":pending?"更新已准备好，重启后生效":ModuleRuntime.notice();
+  status.setText(message);status.setVisibility(message.isEmpty()?View.GONE:View.VISIBLE);
   choose.setText(running?"正在准备…":pending?"应用更新":"导入更新");
   choose.setEnabled(!running);choose.setAlpha(running?0.5f:1f);
   more.setVisibility(!running&&(ModuleRuntime.isDynamic()||pending)?View.VISIBLE:View.GONE);

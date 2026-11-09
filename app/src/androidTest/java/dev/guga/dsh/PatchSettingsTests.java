@@ -18,6 +18,7 @@ public class PatchSettingsTests {
   try {
    for(int repeat=0;repeat<2;repeat++) {
     i.runOnMainSync(()->{a.visible=false;a.updateSettings();});i.waitForIdleSync();
+    i.runOnMainSync(()->ClaudeSettingsTests.touch(a.settingsPages.hostUpdatesEntry,30,30));i.waitForIdleSync();
     var filter=new IntentFilter(Intent.ACTION_OPEN_DOCUMENT,"*/*");filter.addCategory(Intent.CATEGORY_OPENABLE);
     var monitor=i.addMonitor(filter,new android.app.Instrumentation.ActivityResult(Activity.RESULT_CANCELED,null),true);
     i.runOnMainSync(()->ClaudeSettingsTests.touch(a.settingsPages.importPatch,20,20));i.waitForIdleSync();Thread.sleep(250);
@@ -28,6 +29,7 @@ public class PatchSettingsTests {
     i.waitForIdleSync();assertFalse(dev.guga.updates.ReleaseUpdater.isRunning());
     assertTrue(a.settingsPages.importPatch.isEnabled());assertFalse(a.settingsPages.installPatch.isEnabled());
     assertTrue(a.settingsPages.patchStatus.getText().toString().contains("补丁"));
+    i.runOnMainSync(()->a.settingsPages.hostUpdates.dismiss());i.waitForIdleSync();
     i.runOnMainSync(a::onBackPressed);i.waitForIdleSync();assertSame(a.chatRoot,a.currentPage);
    }
    i.runOnMainSync(a::updateSettings);i.waitForIdleSync();android.graphics.Bitmap bitmap=android.graphics.Bitmap.createBitmap(a.getWindow().getDecorView().getWidth(),a.getWindow().getDecorView().getHeight(),android.graphics.Bitmap.Config.ARGB_8888);
