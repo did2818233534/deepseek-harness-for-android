@@ -98,7 +98,7 @@ public final class HarnessService extends Service {
 
   private void copyAsset(String name, File dest) throws IOException {
     try (
-      InputStream in = getAssets().open(name);
+      InputStream in = dev.guga.ota.ModuleRuntime.openAsset(this,name);
       FileOutputStream out = new FileOutputStream(dest)
     ) {
       FileTools.copy(in, out, 20 * 1024 * 1024);

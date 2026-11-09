@@ -2,7 +2,7 @@
 
 DSH for Android 是 DeepSeek Harness 的非官方原生 Android 移植，适合在手机上联网检索、整理文档和处理图片。应用通过 JNI 在本机运行 Harness 核心，界面、文件选择、密钥存储和系统分享使用 Android API。
 
-**手机版版本为 v0.0.1，移植自官方 DeepSeek Harness 0.2.1-rc.5。** 两者独立编号。[上游版本与移植范围](docs/architecture.md)
+**手机版宿主版本为 v0.0.4，移植自官方 DeepSeek Harness 0.2.1-rc.5。** 两者独立编号。[上游版本与移植范围](docs/architecture.md)
 
 ## 安装与使用
 
@@ -45,6 +45,14 @@ DSH for Android 是 DeepSeek Harness 的非官方原生 Android 移植，适合�
 APK 位于 `app/build/outputs/apk/full/claudeTest/`。完整依赖和运行时准备见[构建指南](docs/development.md)，接口配置与兼容性见[Claude 配置说明](docs/claude.md)。本分支测试包不通过正式版更新渠道升级。
 
 设置层和模拟服务回归已通过；软件模拟器内嵌原生运行时仍有启动问题，测试结果不等于所有真机和中转站均已完成端到端验证。具体范围及限制见配置说明。
+
+## 宿主与动态模块更新
+
+首次安装本版完整 APK 后，可在「设置 → 应用更新 → 动态模块更新」导入 `.dshota`，校验通过后退出并重新打开应用即可启用，无需系统安装。界面分别显示宿主与业务模块版本；聊天和设置保留，也可恢复宿主内置模块。
+
+业务代码和运行脚本支持动态更新；系统权限、Android 编译资源、第三方依赖和原生运行环境变更仍需完整 APK 更新。后续发布同时提供完整 APK 与对应补丁：兼容更新为 `.dshota`，宿主升级为需系统安装的 `.dshpatch`。首次启用必须安装一次完整 APK。
+
+详见[动态模块架构与使用说明](docs/dynamic-modules.md)及[宿主补丁说明](docs/patch-updates.md)。
 
 ## 文档
 

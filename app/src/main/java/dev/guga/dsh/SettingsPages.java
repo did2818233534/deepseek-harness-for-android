@@ -2,6 +2,7 @@ package dev.guga.dsh;
 import dev.guga.dsh.settings.Settings;
 
 import android.app.*;
+import android.content.Intent;
 import android.text.InputType;
 import android.view.*;
 import android.widget.*;
@@ -11,6 +12,35 @@ import dev.guga.updates.UpdateButton;
 final class SettingsPages {
   private final MainActivity activity;
   LinearLayout providerRows;
+  ModuleUpdatePanel modulePanel;
+  static final int IMPORT_PATCH=41;
+  android.widget.TextView patchStatus;
+  android.widget.Button importPatch,installPatch;
+  void importPatchResult(android.net.Uri uri) {
+    if(patchStatus!=null)patchStatus.setText("正在校验并合成更新…");
+    if(importPatch!=null)importPatch.setEnabled(false);
+    if(installPatch!=null)installPatch.setEnabled(false);
+    dev.guga.updates.ReleaseUpdater.preparePatch(activity,uri,dev.guga.ota.ModuleRuntime.currentApk(activity),error->{
+      if(activity.isFinishing()||activity.isDestroyed())return;
+      if(importPatch!=null)importPatch.setEnabled(true);
+      if(patchStatus!=null)patchStatus.setText(error==null?"更新已准备好，点击下方按钮安装":error);
+      if(installPatch!=null)installPatch.setEnabled(ReleaseUpdater.hasDownloadedUpdate(activity));
+    });
+  }
+  void patchControls(LinearLayout entries) {
+    activity.settingSection(entries,"宿主安装更新");
+    entries.addView(activity.standaloneHelp("导入更新补丁",16,activity.ink,"选择下载的 .dshpatch 文件。应用会校验当前版本并合成完整安装包，再交给系统安装；聊天和设置保留。补丁必须与当前安装版本匹配，失败时可直接使用完整 APK。合成需要额外存储空间。"));
+    importPatch=activity.button("导入宿主补丁",v->{
+      try{activity.startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*"),IMPORT_PATCH);}
+      catch(Exception e){activity.toast("无法打开文件选择器");}
+    });
+    importPatch.setEnabled(!ReleaseUpdater.isRunning());activity.addAction(entries,importPatch,false);
+    patchStatus=activity.label(ReleaseUpdater.isRunning()?ReleaseUpdater.statusMessage():ReleaseUpdater.hasDownloadedUpdate(activity)?"已有准备好的更新，可以安装":"",14,activity.muted);
+    entries.addView(patchStatus);
+    installPatch=activity.button("安装已准备更新",v->ReleaseUpdater.installDownloaded(activity));
+    installPatch.setEnabled(!ReleaseUpdater.isRunning()&&ReleaseUpdater.hasDownloadedUpdate(activity));
+    activity.addAction(entries,installPatch,false);
+  }
 
   SettingsPages(MainActivity activity) {
     this.activity = activity;
@@ -116,10 +146,11 @@ final class SettingsPages {
     entries.setPadding(activity.dp(4), activity.dp(12), activity.dp(4), activity.dp(20));
     String version="";
     try { version=activity.getPackageManager().getPackageInfo(activity.getPackageName(),0).versionName; } catch (Exception ignored) {}
-    activity.settingSection(entries, "当前版本 " + version);
+    activity.settingSection(entries, "宿主版本 " + version);
+    modulePanel=new ModuleUpdatePanel(activity);modulePanel.addTo(entries);
     if (BuildConfig.CLAUDE_TEST) {
-      entries.addView(activity.label("Claude 独立测试版：通过测试 APK 手动更新，与正式完整版的数据互不影响。",16,activity.muted));
-      activity.showPage("应用更新", entries); return;
+      entries.addView(activity.label("Claude 独立测试版，与正式完整版的数据互不影响。",16,activity.muted));
+      patchControls(entries);activity.showPage("应用更新", entries); return;
     }
     LinearLayout update = activity.row();
     update.setPadding(activity.dp(16), activity.dp(16), 0, activity.dp(16));
@@ -138,6 +169,6 @@ final class SettingsPages {
       detail.show(); activity.styleDialog(detail,false);
     });
     activity.addAction(entries,checkUpdate,false);
-    activity.showPage("应用更新", entries);
+    patchControls(entries);activity.showPage("应用更新", entries);
   }
 }

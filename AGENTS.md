@@ -20,3 +20,5 @@
 - 功能完成必须按用户真实操作流程验证正向、反向和重复操作，不能只测首次成功。选择相关功能覆盖全选→取消→再次全选、部分选择、复制、返回，以及长按消息多选不受影响；手势测试不能只用 performClick/performLongClick 替代真实触摸。报告已验证范围和未验证部分，测试完成清理后台。
 
 - 用户要求：后续修改完成并验证通过后，自动覆盖安装到已连接的手机，保留聊天和设置；无需再次询问安装。发布 Release 仍按用户要求执行。
+
+- 发布使用 scripts/package-module-update.py：完整 APK + 兼容业务更新的 .dshota；宿主不兼容时生成需系统安装的 .dshpatch。首次宿主仅 bootstrap 完整包。通过 Gradle 参数严格递增 versionCode 和 moduleVersion；.local/module-bases 与 .local/patch-bases 的精确发布基准不随历史 APK 清理，不能以重编译旧代码替代。宿主/模块边界见 docs/dynamic-modules.md；业务数据格式须保持回退兼容。

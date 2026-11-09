@@ -17,7 +17,7 @@ public final class ReasoningOptions {
   }
   public static ReasoningOptions forModel(Context context,String provider,String model) {
     try {
-      if(rules==null)try(var input=context.getAssets().open("reasoning-models.json")) {
+      if(rules==null)try(var input=dev.guga.ota.ModuleRuntime.openAsset(context,"reasoning-models.json")) {
         rules=new JSONArray(new String(dev.guga.dsh.files.FileTools.readLimited(input,65536),java.nio.charset.StandardCharsets.UTF_8));
       }
       String normalized=model.toLowerCase(Locale.ROOT).replace('.','-');

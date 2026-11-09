@@ -1021,6 +1021,8 @@ public final class MainActivity extends Activity {
   protected void onActivityResult(int request, int result, Intent data) {
     super.onActivityResult(request, result, data);
     if (result != RESULT_OK || data == null) return;
+    if(request==ModuleUpdatePanel.IMPORT_MODULE){if(data.getData()!=null){if(settingsPages.modulePanel==null)settingsPages.updateSettings();settingsPages.modulePanel.importResult(data.getData());}return;}
+    if(request==SettingsPages.IMPORT_PATCH){if(data.getData()!=null)settingsPages.importPatchResult(data.getData());return;}
     if(request==IMPORT||request==IMPORT_IMAGE){
       if(attachmentPickerGeneration!=attachments.generation)return;
       ArrayList<Uri> uris=new ArrayList<>();
