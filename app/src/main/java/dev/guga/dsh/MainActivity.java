@@ -778,11 +778,8 @@ public final class MainActivity extends Activity {
     iconParams.rightMargin = dp(20);
     entry.addView(symbol, iconParams);
     entry.addView(helpTitle(title,18,ink,""), new LinearLayout.LayoutParams(0, -2, 1));
-    // Two square touch targets; only navigation menus use the divided action block.
+    // Transparent action areas share the menu surface; only vertical rules separate them.
     FrameLayout actions=new FrameLayout(this);
-    GradientDrawable actionSurface=ui.shape(UiStyle.LOW,12);
-    actionSurface.setStroke(dp(1),UiStyle.color(0xFFE1DBE8));
-    actions.setBackground(actionSurface);actions.setClipToOutline(true);
     LinearLayout cells=row();
     ImageButton arrow=icon(R.drawable.ic_chevron_down,"打开"+title,click);
     arrow.setRotation(-90);arrow.setImageTintList(android.content.res.ColorStateList.valueOf(muted));
@@ -791,10 +788,10 @@ public final class MainActivity extends Activity {
     addHelp(cells,title,detail);
     if(cells.getChildCount()>1)cells.getChildAt(1).setBackground(ui.surface(Color.TRANSPARENT,0));
     actions.addView(cells,new FrameLayout.LayoutParams(-1,-1));
-    if(!detail.isEmpty()) {
+    for(int gravity : detail.isEmpty() ? new int[]{Gravity.START} : new int[]{Gravity.START,Gravity.CENTER}) {
       View divider=new View(this);divider.setBackgroundColor(UiStyle.color(0xFFE1DBE8));
       divider.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-      FrameLayout.LayoutParams line=new FrameLayout.LayoutParams(dp(1),-1,Gravity.CENTER);
+      FrameLayout.LayoutParams line=new FrameLayout.LayoutParams(dp(1),-1,gravity);
       actions.addView(divider,line);
     }
     entry.addView(actions,new LinearLayout.LayoutParams(dp(detail.isEmpty()?48:96),dp(48)));

@@ -15,12 +15,12 @@
 仅 `settingEntry` 导航菜单使用分格；表单标题、开关、聊天快捷设置不使用边框或分隔线。
 
 - 箭头在左，问号在右，两个独立点击区各为 **48 × 48dp（1:1）**。
-- 合并操作块为 **96 × 48dp（2:1）**，圆角 12dp；中央覆盖 1dp 细分隔线，不额外挤占点击宽度。
-- 外框和中线使用主题弱描边色，沿用浅紫表面；不增加突出色块。问号图形仍为 18dp。
+- 两个操作区合计 **96 × 48dp（2:1）**；文字与箭头之间、箭头与问号之间各覆盖一条 1dp 竖线，不额外挤占点击宽度。
+- 竖线使用主题弱描边色；操作区完全透明，直接沿用整行原有底色，不添加小方框、独立圆角、外边框或不同底色。问号图形仍为 18dp。
 - 菜单标题区域和箭头进入设置，问号仅打开说明。长标题允许菜单行增高，操作块保持自身比例并垂直居中。
 - 不含说明的导航菜单仅保留 48 × 48dp 箭头格，不画无意义的空帮助格。
 
-依据：[Android 无障碍指南](https://developer.android.com/guide/topics/ui/accessibility/apps)建议触控区域至少 48 × 48dp；[Material 3 IconButton 实现说明](https://android.googlesource.com/platform/frameworks/support/+/900d284d039563396a7f5707122ab5eee3f3041a/compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/IconButton.kt)同样使用该最小触控尺寸。**2:1 的组合比例、圆角和描边是本项目基于两个方形操作区作出的设计选择，不是官方强制比例。**
+依据：[Android 无障碍指南](https://developer.android.com/guide/topics/ui/accessibility/apps)建议触控区域至少 48 × 48dp；[Material 3 IconButton 实现说明](https://android.googlesource.com/platform/frameworks/support/+/900d284d039563396a7f5707122ab5eee3f3041a/compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/IconButton.kt)同样使用该最小触控尺寸。**2:1 的组合比例和竖线分隔是本项目基于两个方形操作区作出的设计选择，不是官方强制比例。**
 
 ## 例外白名单
 
