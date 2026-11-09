@@ -5,7 +5,7 @@
 - 有导航列表的页面，问号放在箭头右侧，作为最右侧的帮助操作列。
 - 有开关的行同样按“标题 → 开关 → 问号”排列，问号不随标题长短移动。
 - 页面中的问号中心沿同一竖线对齐；采用公共 `MainActivity.addHelp`，点击区 48dp，图形 18dp，使用主题的次要文字色。
-- 普通设置列表保留 4dp 外侧留白、16dp 卡片内边距。无卡片的帮助标题使用 `standaloneHelp`，尾部预留 16dp，与列表帮助列对齐。
+- 普通设置列表保留 4dp 外侧留白、左侧 16dp 卡片内边距，右侧帮助区贴边，不额外留白。无卡片的帮助标题使用 `standaloneHelp`，尾部不额外留白，与列表帮助列对齐。
 - 没有列表的页面或独立底部面板，以本页内容右边缘为基准统一对齐，不强行套用其他容器的屏幕坐标。
 - 帮助按钮只打开说明，不触发父级跳转或开关。长标题换行，不压缩帮助点击区。
 - 不需要帮助说明的条目不添加空问号。例外必须先登记，不能在各页面临时写偏移量。
@@ -15,12 +15,12 @@
 仅 `settingEntry` 导航菜单使用分格；表单标题、开关、聊天快捷设置不使用边框或分隔线。
 
 - 箭头在左，问号在右，两个独立点击区各为 **48 × 48dp（1:1）**。
-- 两个操作区合计 **96 × 48dp（2:1）**；文字与箭头之间、箭头与问号之间各覆盖一条 1dp 竖线，不额外挤占点击宽度。
+- 两个操作区各宽 **48dp**，问号区右侧直接到菜单边缘；容器高度跟随整行，竖线贯穿菜单上下边缘、无上下空隙。图标的 48dp 点击区垂直居中；文字与箭头之间、箭头与问号之间各覆盖一条 1dp 竖线，不额外挤占点击宽度。
 - 竖线使用主题弱描边色；操作区完全透明，直接沿用整行原有底色，不添加小方框、独立圆角、外边框或不同底色。问号图形仍为 18dp。
-- 菜单标题区域和箭头进入设置，问号仅打开说明。长标题允许菜单行增高，操作块保持自身比例并垂直居中。
+- 菜单标题区域和箭头进入设置，问号仅打开说明。长标题允许菜单行增高，操作区随整行增高，图标垂直居中。
 - 不含说明的导航菜单仅保留 48 × 48dp 箭头格，不画无意义的空帮助格。
 
-依据：[Android 无障碍指南](https://developer.android.com/guide/topics/ui/accessibility/apps)建议触控区域至少 48 × 48dp；[Material 3 IconButton 实现说明](https://android.googlesource.com/platform/frameworks/support/+/900d284d039563396a7f5707122ab5eee3f3041a/compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/IconButton.kt)同样使用该最小触控尺寸。**2:1 的组合比例和竖线分隔是本项目基于两个方形操作区作出的设计选择，不是官方强制比例。**
+依据：[Android 无障碍指南](https://developer.android.com/guide/topics/ui/accessibility/apps)建议触控区域至少 48 × 48dp；[Material 3 IconButton 实现说明](https://android.googlesource.com/platform/frameworks/support/+/900d284d039563396a7f5707122ab5eee3f3041a/compose/material3/material3/src/commonMain/kotlin/androidx/compose/material3/IconButton.kt)同样使用该最小触控尺寸。**48dp 等宽分区和贯穿竖线是本项目基于两个方形操作区作出的设计选择，不是官方强制比例。**
 
 ## 例外白名单
 

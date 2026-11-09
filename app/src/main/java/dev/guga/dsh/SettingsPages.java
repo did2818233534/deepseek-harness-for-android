@@ -122,7 +122,7 @@ final class SettingsPages {
       activity.showPage("应用更新", entries); return;
     }
     LinearLayout update = activity.row();
-    update.setPadding(activity.dp(16), activity.dp(16), activity.dp(16), activity.dp(16));
+    update.setPadding(activity.dp(16), activity.dp(16), 0, activity.dp(16));
     update.setBackground(activity.shape(UiStyle.SURFACE, 24));
     update.addView(activity.helpTitle("自动更新",18,activity.ink,""),new LinearLayout.LayoutParams(0,-2,1));
     Switch autoUpdate=new Switch(activity); autoUpdate.setContentDescription("自动更新");

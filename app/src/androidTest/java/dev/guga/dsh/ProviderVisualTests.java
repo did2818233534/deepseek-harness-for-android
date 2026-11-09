@@ -26,6 +26,33 @@ public class ProviderVisualTests {
       i.waitForIdleSync();Thread.sleep(300);capture(a,UiStyle.dark?"provider-more-dark.png":"provider-more.png");
     }finally{i.runOnMainSync(()->{if(panel[0]!=null)panel[0].close();new Settings(a).saveEditingProvider(original);a.finish();});HarnessService.nodeStarted=previous;}
   }
+  @Test public void captureFullHeightMenuDividers() throws Exception {
+    var i=InstrumentationRegistry.getInstrumentation();var c=i.getTargetContext();
+    var appearance=c.getSharedPreferences("appearance",0);String original=appearance.getString("theme","system");
+    boolean started=HarnessService.nodeStarted;HarnessService.nodeStarted=true;
+    try {
+      for(String theme:new String[]{"dark","light"}) {
+        appearance.edit().putString("theme",theme).commit();
+        MainActivity a=(MainActivity)i.startActivitySync(new Intent(c,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        try {
+          i.runOnMainSync(()->{a.visible=false;a.settings();});i.waitForIdleSync();
+          i.runOnMainSync(()->{
+            var help=GeneralSettingsTests.findDescription(a.currentPage,"模型与服务说明");
+            var cells=(android.view.ViewGroup)help.getParent();
+            var actions=(android.view.ViewGroup)cells.getParent();
+            var entry=(android.view.ViewGroup)actions.getParent();
+            assertEquals(a.dp(48),help.getWidth());assertEquals(help.getWidth(),cells.getChildAt(0).getWidth());
+            assertEquals(entry.getHeight(),actions.getHeight());assertEquals(0,actions.getTop());
+            assertEquals(entry.getWidth(),actions.getRight());
+            for(int n=1;n<actions.getChildCount();n++) {
+              assertEquals(0,actions.getChildAt(n).getTop());assertEquals(entry.getHeight(),actions.getChildAt(n).getHeight());
+            }
+          });
+          capture(a,"menu-edges-"+theme+".png");
+        }finally{i.runOnMainSync(a::finish);}
+      }
+    }finally{appearance.edit().putString("theme",original).commit();HarnessService.nodeStarted=started;}
+  }
   static void capture(MainActivity a,String name) throws Exception {
     // TCG-only emulator can retain system ANR dialogs from boot; use actual screen touches to wait.
     var automation=InstrumentationRegistry.getInstrumentation().getUiAutomation();

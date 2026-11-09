@@ -348,7 +348,7 @@ final class ModelSettingsPanel {
     toggle.setBackground(a.ui.shape(UiStyle.LOW, 16));
     if(detail==null)box.addView(toggle, a.spacedControl());
     else {
-      LinearLayout row=a.row();row.setPadding(a.dp(16),0,a.dp(16),0);
+      LinearLayout row=a.row();row.setPadding(a.dp(16),0,0,0);
       row.setBackground(a.ui.shape(UiStyle.LOW,16));
       row.addView(a.helpTitle(title,16,a.ink,""),new LinearLayout.LayoutParams(0,-2,1));
       toggle.setText("");toggle.setContentDescription(title);toggle.setPadding(0,0,0,0);toggle.setBackgroundColor(Color.TRANSPARENT);

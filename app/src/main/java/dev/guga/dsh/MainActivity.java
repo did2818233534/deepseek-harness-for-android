@@ -731,7 +731,7 @@ public final class MainActivity extends Activity {
   static final int SETTINGS_ACTION_DP=56;
   LinearLayout standaloneHelp(String title,int size,int color,String detail){
     LinearLayout heading=helpTitle(title,size,color,detail);
-    heading.setPaddingRelative(0,0,dp(16),0);
+    heading.setPaddingRelative(0,0,0,0);
     return heading;
   }
   LinearLayout helpTitle(String title, int size, int color, String detail) {
@@ -761,7 +761,7 @@ public final class MainActivity extends Activity {
       boolean first, boolean last, View.OnClickListener click) {
     LinearLayout entry = row();
     entry.setBaselineAligned(false);
-    entry.setPadding(dp(16), dp(8), dp(16), dp(8));
+    entry.setPadding(dp(16), 0, 0, 0);
     entry.setMinimumHeight(dp(64));
     GradientDrawable surface = shape(0xFFECE6F0, 4);
     float top = dp(first ? 24 : 4), bottom = dp(last ? 24 : 4);
@@ -777,7 +777,9 @@ public final class MainActivity extends Activity {
     LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(26), dp(26));
     iconParams.rightMargin = dp(20);
     entry.addView(symbol, iconParams);
-    entry.addView(helpTitle(title,18,ink,""), new LinearLayout.LayoutParams(0, -2, 1));
+    LinearLayout menuTitle=helpTitle(title,18,ink,"");
+    menuTitle.setPadding(0,dp(8),0,dp(8));
+    entry.addView(menuTitle, new LinearLayout.LayoutParams(0, -2, 1));
     // Transparent action areas share the menu surface; only vertical rules separate them.
     FrameLayout actions=new FrameLayout(this);
     LinearLayout cells=row();
@@ -794,7 +796,7 @@ public final class MainActivity extends Activity {
       FrameLayout.LayoutParams line=new FrameLayout.LayoutParams(dp(1),-1,gravity);
       actions.addView(divider,line);
     }
-    entry.addView(actions,new LinearLayout.LayoutParams(dp(detail.isEmpty()?48:96),dp(48)));
+    entry.addView(actions,new LinearLayout.LayoutParams(dp(detail.isEmpty()?48:96),-1));
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
     lp.bottomMargin = dp(4);
     body.addView(entry, lp);
@@ -985,7 +987,7 @@ public final class MainActivity extends Activity {
 
   void addFileCleanupSetting(LinearLayout body) {
     LinearLayout setting = row();
-    setting.setPadding(dp(16),dp(12),dp(16),dp(12));
+    setting.setPadding(dp(16),dp(12),0,dp(12));
     setting.setBackground(shape(UiStyle.SURFACE,24));
     setting.addView(helpTitle("删除对话时清理关联文件",16,ink,""),new LinearLayout.LayoutParams(0,-2,1));
     Settings prefs=new Settings(this);

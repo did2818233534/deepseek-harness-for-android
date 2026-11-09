@@ -224,7 +224,7 @@ public class ClaudeSettingsTests {
           var row=(android.view.ViewGroup)help.getParent();assertSame(help,row.getChildAt(row.getChildCount()-1));
           assertTrue(help.getLeft()>row.getChildAt(row.getChildCount()-2).getLeft());
           assertEquals(a.dp(48),help.getWidth());assertEquals(a.dp(48),help.getHeight());
-          assertEquals(a.dp(96),row.getWidth());assertEquals(a.dp(48),row.getHeight());
+          assertEquals(a.dp(96),row.getWidth());assertTrue(row.getHeight()>=a.dp(64));
           touch(help,20,20);
         });i.waitForIdleSync();
         i.runOnMainSync(()->{
