@@ -4,3 +4,4 @@ rootProject.name = 'DSH for Android'
 include ':app'
 
 include ':release-updater'
+include ':module-host'

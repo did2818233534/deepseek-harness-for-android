@@ -10,15 +10,28 @@ android {
   lite { dimension 'edition'; manifestPlaceholders = [updateManifest: 'latest-lite.json', editionLabel: 'DSH for Android Lite'] }
   full { dimension 'edition'; applicationIdSuffix '.full'; manifestPlaceholders = [updateManifest: 'latest-full.json', editionLabel: 'DSH for Android Full'] }
  }
+ sourceSets.androidTest.assets.srcDir(rootProject.file('.local/patch-test-assets'))
+ sourceSets.androidTest.assets.srcDir(rootProject.file('.local/module-test-assets'))
  sourceSets.full.assets.srcDir(System.getenv('DSH_TERMUX_ASSETS') ?: rootProject.file('.local/termux/assets').absolutePath)
+ testBuildType project.findProperty('testBuildType') ?: 'debug'
  namespace 'dev.guga.dsh'
  // Match the native build toolchain; preserve debug symbols in packaged libraries.
  ndkVersion '29.0.14206865'
  compileSdk 35
- defaultConfig { applicationId 'dev.guga.dsh'; minSdk 28; targetSdk 35; versionCode 2; versionName 'v0.0.2'; testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner' }
+ buildFeatures { buildConfig true }
+ defaultConfig { buildConfigField 'long', 'MODULE_VERSION', (project.findProperty('moduleVersion') ?: project.findProperty('appVersionCode') ?: '4') + 'L'; buildConfigField 'boolean', 'CLAUDE_TEST', 'false'; applicationId 'dev.guga.dsh'; minSdk 28; targetSdk 35; versionCode = (project.findProperty('appVersionCode') ?: '4').toInteger(); versionName = (project.findProperty('appVersionName') ?: 'v0.0.4'); testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner' }
  compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
  packaging { jniLibs { useLegacyPackaging true; keepDebugSymbols += ['**/*.so'] }; resources { excludes += ['META-INF/DEPENDENCIES','META-INF/LICENSE','META-INF/LICENSE.txt','META-INF/NOTICE','META-INF/NOTICE.txt'] } }
- buildTypes { release { minifyEnabled false; if (personalSigningFile.exists()) signingConfig signingConfigs.personal } }
+ buildTypes {
+  claudeTest {
+   initWith debug
+   buildConfigField 'boolean', 'CLAUDE_TEST', 'true'
+   applicationIdSuffix '.claudetest'
+   versionNameSuffix '-claude-test'
+   manifestPlaceholders = [editionLabel: 'DSH Claude 测试版']
+   matchingFallbacks = ['debug']
+  }
+  release { minifyEnabled false; if (personalSigningFile.exists()) signingConfig signingConfigs.personal } }
 }
 dependencies {
  implementation 'io.noties.markwon:core:4.6.2'
@@ -26,6 +39,7 @@ dependencies {
  implementation 'io.noties.markwon:ext-tables:4.6.2'
  implementation 'io.noties.markwon:ext-tasklist:4.6.2'
  implementation project(':release-updater')
+ implementation project(':module-host')
  androidTestImplementation 'androidx.test:runner:1.6.2'
  androidTestImplementation 'androidx.test.ext:junit:1.2.1'
  implementation 'org.nanohttpd:nanohttpd:2.3.1'
@@ -45,4 +59,25 @@ tasks.register('verifyFullRuntime') {
   }
  }
 }
-tasks.configureEach { if (name == 'preFullReleaseBuild' || name == 'preFullDebugBuild') dependsOn 'verifyFullRuntime' }
+tasks.configureEach { if (name.startsWith('preFull') && name.endsWith('Build')) dependsOn 'verifyFullRuntime' }
+
+// Signed metadata binds business modules to the exact stable host API and dependencies.
+def moduleAssets = layout.buildDirectory.dir('generated/moduleAssets')
+android.sourceSets.main.assets.srcDir(moduleAssets)
+tasks.register('generateModuleMetadata') {
+ outputs.upToDateWhen { false }
+ doLast {
+  def digest = java.security.MessageDigest.getInstance('SHA-256')
+  def inputs = []
+  ['module-host/src','release-updater/src/main'].each { path ->
+   rootProject.fileTree(path).files.findAll { it.isFile() }.each { inputs.add(it) }
+  }
+  ['app/build.gradle','app/src/main/AndroidManifest.xml','module-host/build.gradle','release-updater/build.gradle','build.gradle','settings.gradle'].each { inputs.add(rootProject.file(it)) }
+  inputs.sort { rootProject.relativePath(it) }.each { f ->
+   digest.update(rootProject.relativePath(f).getBytes('UTF-8'));digest.update((byte)0);digest.update(f.bytes)
+  }
+  def folder=moduleAssets.get().asFile;folder.mkdirs()
+  new File(folder,'dsh-module.properties').text='moduleVersion='+ (project.findProperty('moduleVersion') ?: android.defaultConfig.versionCode) +'\nhostContract='+digest.digest().encodeHex().toString()+'\n'
+ }
+}
+tasks.named('preBuild').configure { dependsOn 'generateModuleMetadata' }

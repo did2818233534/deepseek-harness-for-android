@@ -1,9 +1,12 @@
 import crypto from "node:crypto";
+import { nativeThinking, thinkingRejected } from "./reasoning.ts";
+import type { NativeSteering } from "./steering.ts";
+import { anthropicRequest, anthropicStream, isAnthropicContextError } from "./anthropic.ts";
 import { supportsImages } from "./vision.ts";
 import { attachmentImage } from "../files/attachments.ts";
 import { StringDecoder } from "node:string_decoder";
 import { LlmAdapter, ToolCallId, HarnessError, isContextWindowExceededError } from "@deepseek-ai/dsh-llm";
-/** Translates the upstream canonical transcript to a Chat Completions transport owned by Android. */
+/** Android-owned transports; the vendored harness keeps its canonical transcript. */
 export class AndroidAdapter extends LlmAdapter {
   constructor(
     private bridge,
@@ -17,10 +20,27 @@ export class AndroidAdapter extends LlmAdapter {
     // model IDs do not inherit an unverified capacity; overflow recovery remains available.
     const known = /^(deepseek-flash|deepseek-v4(?:\.1)?-(?:flash|pro)|deepseek-pro)$/i.test(model);
     const effort = this.settings().reasoningEffort;
+    if (this.settings().provider === "anthropic") return {provider,id:model,name:model,defaultMaxTokens:16384};
     return { provider, id: model, name: model,
       ...(known ? {context: {contextWindow: 1_000_000}} : {}),
       defaultMaxTokens: effort === "none" ? 8192 : effort === "max" ? 131072 : 65536,
     };
+  }
+  nativeSteering(): NativeSteering | undefined {
+    // Both current transports are request/response APIs. Claude Managed Agents
+    // is a separate engine; Messages thread IDs are NOT live agent session IDs.
+    // See docs/claude.md for the official capability audit.
+    return undefined;
+  }
+  private async modelResponse(body,signal) {
+    try { return await this.bridge("/model",body,signal,true); }
+    catch(error) {
+      signal?.throwIfAborted();
+      if(!thinkingRejected(error) || (!body.thinking&&!body.output_config&&!body.reasoning_effort))throw error;
+      const {thinking,output_config,reasoning_effort,...fallback}=body;
+      // No equivalent universal effort control: let the server choose its default.
+      return this.bridge("/model",fallback,signal,true);
+    }
   }
   private thinkingBudgets = new WeakMap<object, {remaining:number, fast:boolean}>();
   async *stream(options) {
@@ -67,13 +87,41 @@ export class AndroidAdapter extends LlmAdapter {
     if(expired) {
       options.signal?.throwIfAborted();
       budget.fast=true;
-      if(thought)yield {type:"block-end",index:0,block:{type:"reasoning",text:thought}};
+      if(thought && settings.provider!=="anthropic")yield {type:"block-end",index:0,block:{type:"reasoning",text:thought}};
       // A separate index range keeps the abandoned reasoning block distinct.
       for await(const chunk of this.requestStream(options,true))
         yield "index" in chunk ? {...chunk,index:chunk.index+100} : chunk;
     }
   }
+  async *claudeStream(options, fast: boolean) {
+    const settings = this.settings(), extras: string[] = [];
+    if (options.purpose !== "session-title" && options.purpose !== "compaction") {
+      if (settings.packageTools) {
+        try {
+          const info=await this.bridge("/tool",{name:"environment_info",args:{detailed:false}},options.signal);
+          if(info.summary) extras.push("当前共享执行环境（以此次快照为准）：\n"+info.summary);
+        } catch { options.signal?.throwIfAborted(); }
+      }
+      if(settings.customInstructions?.trim()) extras.push("用户的自定义指令（当前消息中的具体要求优先）：\n"+settings.customInstructions.trim());
+    }
+    const requestId=crypto.randomUUID();
+    const body={...anthropicRequest(options,settings,this.workspace,extras,fast),
+      androidEndpoint:settings.modelEndpoint,androidProviderId:settings.providerId || "anthropic",androidProvider:"anthropic",androidBase:settings.base,androidRequestId:requestId};
+    const cancel=()=>{void this.bridge("/cancel-model",{androidRequestId:requestId}).catch(()=>{});};
+    options.signal?.throwIfAborted();
+    options.signal?.addEventListener("abort",cancel,{once:true});
+    try {
+      const response=await this.modelResponse(body,options.signal);
+      if(!response.body) throw Error("Model returned no stream");
+      yield* anthropicStream(response.body,settings,options.signal);
+    } catch(error) {
+      if(isAnthropicContextError(error) || isContextWindowExceededError(error instanceof Error?error.message:String(error)))
+        throw new HarnessError("模型上下文已满","CONTEXT_WINDOW_EXCEEDED",{cause:error});
+      throw error;
+    } finally { options.signal?.removeEventListener("abort",cancel); }
+  }
   async *requestStream(options, fast:boolean) {
+    if (this.settings().provider === "anthropic") { yield* this.claudeStream(options,fast); return; }
     const omitImages = !supportsImages(options.model, this.settings().models);
     const messages = options.messages.map((m) => {
       const text = m.content
@@ -127,18 +175,20 @@ export class AndroidAdapter extends LlmAdapter {
       }));
     if(fast)messages.push({role:"user",content:"请根据原问题及已经取得的工具结果直接给出回答；资料不足时请明确说明，避免重复执行已经完成的操作。"});
     const configuredEffort = fast || options.purpose === "session-title" ? "none" : this.settings().reasoningEffort;
-    const effort = ["none", "low", "high", "max"].includes(configuredEffort) ? configuredEffort : "high";
-    body.thinking = {type: effort === "none" ? "disabled" : "enabled"};
-    if (effort !== "none") body.reasoning_effort = effort;
+    Object.assign(body,nativeThinking("deepseek",options.model,configuredEffort || "high"));
     const requestId=crypto.randomUUID();
     body.androidRequestId=requestId;
+    body.androidProviderId=this.settings().providerId || this.settings().provider || "deepseek";
+    body.androidProvider=this.settings().provider || "deepseek";
+    body.androidBase=this.settings().base;
+    body.androidEndpoint=this.settings().modelEndpoint;
     const cancel=()=>{void this.bridge("/cancel-model",{androidRequestId:requestId}).catch(()=>{});};
     options.signal?.throwIfAborted();
     options.signal?.addEventListener("abort",cancel,{once:true});
     try {
     let response;
     try {
-      response = await this.bridge("/model", body, options.signal, true);
+      response = await this.modelResponse(body,options.signal);
     } catch (error) {
       if (isContextWindowExceededError(error instanceof Error ? error.message : String(error)))
         throw new HarnessError("模型上下文已满", "CONTEXT_WINDOW_EXCEEDED", {cause:error});

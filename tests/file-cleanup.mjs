@@ -1,4 +1,5 @@
-import {build} from '/opt/dsh-android/build-tools/node_modules/esbuild/lib/main.js';
+import {tool} from '../scripts/build-tools.mjs';
+const {build} = await tool('esbuild/lib/main.js');
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import assert from 'node:assert/strict';import {createRequire} from 'node:module';
 const dir=fs.mkdtempSync(path.join(os.tmpdir(),'dsh-cleanup-'));
 try{

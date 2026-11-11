@@ -31,4 +31,21 @@ public final class ReleaseUpdater {
       && AppUpdates.apk(context).exists(); } catch(Exception ignored) { return false; }
   }
   public static void installDownloaded(Activity activity) { activity.startActivity(new Intent(activity,UpdateInstallActivity.class)); }
+  /** Import a local .dshpatch; callback is delivered on main with null on success. */
+  public static void preparePatch(Context context,android.net.Uri uri,java.util.function.Consumer<String> finished) {
+    preparePatch(context,uri,new java.io.File(context.getApplicationInfo().sourceDir),finished);
+  }
+  /** A dynamic host may use its currently running signed module as the exact patch base. */
+  public static void preparePatch(Context context,android.net.Uri uri,java.io.File base,java.util.function.Consumer<String> finished) {
+    Context c=context.getApplicationContext();Handler main=new Handler(Looper.getMainLooper());
+    if(!AppUpdates.running.compareAndSet(false,true)){main.post(()->finished.accept("已有更新任务正在进行，请稍后重试"));return;}
+    AppUpdates.status="正在校验并合成更新…";
+    new Thread(()->{
+      String error=null;
+      try{PatchUpdates.prepare(c,uri,base);AppUpdates.status="补丁已准备好，可以安装";}
+      catch(Exception e){error=e.getMessage()==null?"无法处理补丁，请重新下载或使用完整 APK":e.getMessage();AppUpdates.status=error;}
+      finally{AppUpdates.running.set(false);}
+      String result=error;main.post(()->finished.accept(result));
+    },"apk-patch-import").start();
+  }
 }

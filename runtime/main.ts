@@ -1,7 +1,8 @@
+import { deliverGuidance } from "./providers/steering.ts";
 import { ConversationArchives } from "./sessions/archives.ts";
 import { fileIdentity } from "./files/file-identity.ts";
 import { cleanupSessionFiles } from "./files/file-cleanup.ts";
-import { supportsImages, latestVisionModel } from "./providers/vision.ts";
+import { supportsImages, imageFallback } from "./providers/vision.ts";
 import "./compat/polyfills.ts";
 import { prepareAttachments } from "./files/attachments.ts";
 import { ConversationTitles } from "./sessions/titles.ts";
@@ -36,6 +37,7 @@ if (!root || !bridgePort || !token)
 let settings: any = {}, active: any = null, revision = 0;
 const agents = new Map();
 const disposers = new Map<string,()=>Promise<void>>();
+const sessionAdapters = new Map<string,AndroidAdapter>();
 const adapterDisposers = new Map<string,()=>void>();
 let archiveWork=0;
 const states = new Map<string, any>();
@@ -115,7 +117,7 @@ async function main() {
   await ctx.plugin(TokenMeter);
   await ctx.plugin(ToolResultPruner);
   await ctx.plugin(Compaction);
-  configureWebTransport((route,body,signal)=>bridge(route,{...body,sessionId:execution.getStore()?.sessionId},signal));
+  configureWebTransport((route,body,signal)=>{const state=execution.getStore();const config=state?.settings || settings;return bridge(route,{...body,sessionId:state?.sessionId,providerId:config.providerId || config.provider,model:config.model},signal);});
   await ctx.plugin(Web);
 
   const auth = () => ({ baseURL: 'https://api.deepseek.com/v1/tools', resolveApiKey: async () => undefined });
@@ -200,7 +202,7 @@ async function main() {
   async function releaseAgent(id){
     if(states.get(id)?.busy)throw Error("不能释放正在运行的对话");
     titles.cancel(id);const dispose=disposers.get(id);if(dispose)await dispose();
-    adapterDisposers.get(id)?.();adapterDisposers.delete(id);
+    adapterDisposers.get(id)?.();adapterDisposers.delete(id);sessionAdapters.delete(id);
     disposers.delete(id);agents.delete(id);states.delete(id);
   }
   async function trimAgents(){
@@ -222,7 +224,9 @@ async function main() {
     agents.delete(id);agents.set(id,active); // Recently selected goes to the end.
     const state=stateOf(id);
     if(!state.registered){
-      adapterDisposers.set(id,ctx.llm.registerAdapter(["android-"+id],new AndroidAdapter((route,body,signal,raw)=>bridge(route,{...body,sessionId:id},signal,raw),()=>state.settings,path.join(root,"..","workspace"))));
+      const adapter=new AndroidAdapter((route,body,signal,raw)=>bridge(route,{...body,sessionId:id},signal,raw),()=>state.settings,path.join(root,"..","workspace"));
+      sessionAdapters.set(id,adapter);
+      adapterDisposers.set(id,ctx.llm.registerAdapter(["android-"+id],adapter));
       state.registered=true;
     }
     await trimAgents();
@@ -391,10 +395,11 @@ async function main() {
           if (data.text.length > 100_000)
             throw Error("消息过长，请使用文件导入");
           settings = await bridge("/settings");
-          if (!settings.hasKey) throw Error("请先在设置中填写 API Key");
+          if (!settings.hasKey) throw Error("请先开启供应商、填写 API Key 并选择聊天模型");
           const attachments = prepareAttachments(path.join(root, "..", "workspace"), data.attachments, (state.busy?state.settings:settings).model, true);
           const current=state.busy?state.settings:settings;
-          const fileOnly=settings.autoImageModel===false&&!supportsImages(current.model,current.models)&&attachments.some(a=>a.mediaType);
+          const fallback=imageFallback(current);
+          const fileOnly=!fallback&&!supportsImages(current.model,current.models)&&attachments.some(a=>a.mediaType);
           const content: any[] = data.text ? [{type:"text", text:data.text}] : [];
           for (const a of attachments) {
             if (a.mediaType) {
@@ -405,22 +410,28 @@ async function main() {
           }
           if(!state.busy){state.settings={...settings};target.options.model=settings.model;state.steps=0;}
           if(fileOnly)modelNotice({sessionId:target.id,fileOnly:true});
-          else if(attachments.some(a=>a.mediaType)&&!supportsImages(state.settings.model,state.settings.models)){
+          else if(fallback&&attachments.some(a=>a.mediaType)&&!supportsImages(state.settings.model,state.settings.models)){
             state.imageOriginalModel=state.imageOriginalModel||state.settings.model;
-            state.settings={...state.settings,model:latestVisionModel};target.options.model=latestVisionModel;
-            modelNotice({sessionId:target.id,restored:false,model:latestVisionModel});
+            state.settings={...state.settings,model:fallback};target.options.model=fallback;
+            modelNotice({sessionId:target.id,restored:false,model:fallback});
           }
           state.question=data.text;state.busy=true;state.lastError="";state.revision++;
           void publishStatus().catch(()=>{});
           const steerId=req.url==="/steer"?crypto.randomUUID():undefined;
           if(steerId)state.pendingGuidance.push({id:steerId,text:data.text,attachments});
-          try { target[req.url==="/steer"?"steer":"followup"](
-            createUserMessage({
+          try {
+            const message=createUserMessage({
               content,
               source: { kind: "user", userText:data.text, attachments, ...(steerId?{steerId}:{}) } as any,
-            }),
-          );
-          } catch(error) {restoreImageModel(target);state.busy=false;state.revision++;throw error;}
+            });
+            if(steerId) {
+              const mode=await deliverGuidance(message,m=>target.steer(m),sessionAdapters.get(target.id)?.nativeSteering());
+              if(mode==="native")state.pendingGuidance=state.pendingGuidance.filter(x=>x.id!==steerId);
+            } else target.followup(message);
+          } catch(error) {
+            if(steerId)state.pendingGuidance=state.pendingGuidance.filter(x=>x.id!==steerId);
+            restoreImageModel(target);state.busy=target.status!=="idle";state.revision++;throw error;
+          }
           revision++;
           out = { ok: true };
           break;

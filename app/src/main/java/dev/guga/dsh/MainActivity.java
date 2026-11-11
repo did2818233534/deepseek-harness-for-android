@@ -49,6 +49,7 @@ public final class MainActivity extends Activity {
   boolean settingsPage;
   final ArrayDeque<View> pageHistory = new ArrayDeque<>();
   final Map<View, Runnable> pageCleanup = new HashMap<>();
+  final Map<View, Runnable> pageResume = new HashMap<>();
   View currentPage;
   int previewGeneration;
   PopupWindow modelPopup;
@@ -250,7 +251,8 @@ public final class MainActivity extends Activity {
   @Override
   public void onResume() {
     super.onResume();
-    ReleaseUpdater.checkAutomatically(this);
+    dev.guga.dsh.settings.ModelCatalogRefresh.onAppOpened(this);
+    if (!BuildConfig.CLAUDE_TEST) ReleaseUpdater.checkAutomatically(this);
     visible = true;
     handler.post(poll);
   }
@@ -269,7 +271,7 @@ public final class MainActivity extends Activity {
     transcriptViews.clear();
     io.shutdown();coreIo.shutdown();
     for (Runnable cleanup : pageCleanup.values()) cleanup.run();
-    pageCleanup.clear();
+    pageCleanup.clear();pageResume.clear();
     for (Runnable cleanup : new ArrayList<>(dialogCleanup.values())) cleanup.run();
     dialogCleanup.clear();
     if (modelPopup != null) modelPopup.dismiss();
@@ -637,12 +639,14 @@ public final class MainActivity extends Activity {
     if(fileLibrary!=null && currentPage==fileLibrary.page && fileLibrary.selecting && !fileLibrary.deleting){fileLibrary.setSelecting(false);return;}
     if(messageActions.active() && currentPage==chatRoot) {messageActions.clear();return;}
     if (!pageHistory.isEmpty()) {
+      pageResume.remove(currentPage);
       Runnable cleanup = pageCleanup.remove(currentPage);
       if (cleanup != null) cleanup.run();
       restoringAppearance=false;
       currentPage = pageHistory.pop();
       settingsPage = currentPage != chatRoot;
       setContentView(currentPage);
+      Runnable resume=pageResume.get(currentPage);if(resume!=null)resume.run();
       currentPage.requestApplyInsets();
     } else moveTaskToBack(true);
   }
@@ -727,7 +731,7 @@ public final class MainActivity extends Activity {
   static final int SETTINGS_ACTION_DP=56;
   LinearLayout standaloneHelp(String title,int size,int color,String detail){
     LinearLayout heading=helpTitle(title,size,color,detail);
-    heading.setPaddingRelative(0,0,dp(16)+dp(SETTINGS_ACTION_DP),0);
+    heading.setPaddingRelative(0,0,0,0);
     return heading;
   }
   LinearLayout helpTitle(String title, int size, int color, String detail) {
@@ -737,24 +741,27 @@ public final class MainActivity extends Activity {
     text.setIncludeFontPadding(false);
     text.setGravity(Gravity.CENTER_VERTICAL);
     heading.addView(text,new LinearLayout.LayoutParams(0,-2,1));
-    if(!detail.isEmpty()) {
-      ImageButton help=icon(R.drawable.ic_help,title+"说明",v -> {
-        AlertDialog dialog=new AlertDialog.Builder(this).setTitle(title).setMessage(detail)
-          .setPositiveButton("知道了",null).create();
-        dialog.show(); styleDialog(dialog,false);
-      });
-      help.setPadding(dp(15),dp(15),dp(15),dp(15));
-      help.setImageTintList(android.content.res.ColorStateList.valueOf(muted));
-      heading.addView(help,new LinearLayout.LayoutParams(dp(48),dp(48)));
-    }
+    addHelp(heading,title,detail);
     return heading;
+  }
+
+  void addHelp(LinearLayout row,String title,String detail) {
+    if(detail==null || detail.isEmpty())return;
+    ImageButton help=icon(R.drawable.ic_help,title+"说明",v -> {
+      AlertDialog dialog=new AlertDialog.Builder(this).setTitle(title).setMessage(detail)
+        .setPositiveButton("知道了",null).create();
+      dialog.show();styleDialog(dialog,false);
+    });
+    help.setPadding(dp(15),dp(15),dp(15),dp(15));
+    help.setImageTintList(android.content.res.ColorStateList.valueOf(muted));
+    row.addView(help,new LinearLayout.LayoutParams(dp(48),dp(48)));
   }
 
   void settingEntry(LinearLayout body, int glyph, String title, String detail,
       boolean first, boolean last, View.OnClickListener click) {
     LinearLayout entry = row();
     entry.setBaselineAligned(false);
-    entry.setPadding(dp(16), dp(8), dp(16), dp(8));
+    entry.setPadding(dp(16), 0, 0, 0);
     entry.setMinimumHeight(dp(64));
     GradientDrawable surface = shape(0xFFECE6F0, 4);
     float top = dp(first ? 24 : 4), bottom = dp(last ? 24 : 4);
@@ -770,14 +777,30 @@ public final class MainActivity extends Activity {
     LinearLayout.LayoutParams iconParams = new LinearLayout.LayoutParams(dp(26), dp(26));
     iconParams.rightMargin = dp(20);
     entry.addView(symbol, iconParams);
-    entry.addView(helpTitle(title,18,ink,detail), new LinearLayout.LayoutParams(0, -2, 1));
-    ImageView arrow = new ImageView(this);
-    arrow.setImageResource(R.drawable.ic_chevron_down);
-    arrow.setImageTintList(android.content.res.ColorStateList.valueOf(muted));
-    arrow.setRotation(-90);
-    arrow.setScaleType(ImageView.ScaleType.CENTER);
-    arrow.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-    entry.addView(arrow,new LinearLayout.LayoutParams(dp(SETTINGS_ACTION_DP),dp(48)));
+    LinearLayout menuTitle=helpTitle(title,18,ink,"");
+    menuTitle.setPadding(0,dp(8),0,dp(8));
+    entry.addView(menuTitle, new LinearLayout.LayoutParams(0, -2, 1));
+    // Transparent action areas share the menu surface; only vertical rules separate them.
+    FrameLayout actions=new FrameLayout(this);
+    int actionWidth=Math.round(dp(64)*4f/5f);
+    LinearLayout cells=row();
+    ImageButton arrow=icon(R.drawable.ic_chevron_down,"打开"+title,click);
+    arrow.setRotation(-90);arrow.setImageTintList(android.content.res.ColorStateList.valueOf(muted));
+    arrow.setBackground(ui.surface(Color.TRANSPARENT,0));
+    cells.addView(arrow,new LinearLayout.LayoutParams(actionWidth,dp(48)));
+    addHelp(cells,title,detail);
+    if(cells.getChildCount()>1){
+      cells.getChildAt(1).setBackground(ui.surface(Color.TRANSPARENT,0));
+      cells.getChildAt(1).getLayoutParams().width=actionWidth;
+    }
+    actions.addView(cells,new FrameLayout.LayoutParams(-1,-1));
+    for(int gravity : detail.isEmpty() ? new int[]{Gravity.START} : new int[]{Gravity.START,Gravity.CENTER}) {
+      View divider=new View(this);divider.setBackgroundColor(UiStyle.color(0xFFE1DBE8));
+      divider.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+      FrameLayout.LayoutParams line=new FrameLayout.LayoutParams(dp(1),-1,gravity);
+      actions.addView(divider,line);
+    }
+    entry.addView(actions,new LinearLayout.LayoutParams(actionWidth*(detail.isEmpty()?1:2),-1));
     LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2);
     lp.bottomMargin = dp(4);
     body.addView(entry, lp);
@@ -968,9 +991,9 @@ public final class MainActivity extends Activity {
 
   void addFileCleanupSetting(LinearLayout body) {
     LinearLayout setting = row();
-    setting.setPadding(dp(16),dp(12),dp(16),dp(12));
+    setting.setPadding(dp(16),dp(12),0,dp(12));
     setting.setBackground(shape(UiStyle.SURFACE,24));
-    setting.addView(helpTitle("删除对话时清理关联文件",16,ink,"默认开启。删除对话时，同时清理它导入或生成的文件；其他对话仍引用的文件会保留。关闭后仅删除聊天记录。已导出到手机其他位置的文件不受影响。"),new LinearLayout.LayoutParams(0,-2,1));
+    setting.addView(helpTitle("删除对话时清理关联文件",16,ink,""),new LinearLayout.LayoutParams(0,-2,1));
     Settings prefs=new Settings(this);
     Switch toggle=new Switch(this);
     toggle.setContentDescription("删除对话时清理关联文件");
@@ -980,6 +1003,7 @@ public final class MainActivity extends Activity {
       catch(Exception e){toggle.setChecked(prefs.cleanupConversationFiles());toast(e.getMessage());}
     });
     setting.addView(toggle,new LinearLayout.LayoutParams(dp(SETTINGS_ACTION_DP),dp(48)));
+    addHelp(setting,"删除对话时清理关联文件","默认开启。删除对话时，同时清理它导入或生成的文件；其他对话仍引用的文件会保留。关闭后仅删除聊天记录。已导出到手机其他位置的文件不受影响。");
     LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.bottomMargin=dp(16);
     body.addView(setting,lp);
   }
@@ -997,6 +1021,8 @@ public final class MainActivity extends Activity {
   protected void onActivityResult(int request, int result, Intent data) {
     super.onActivityResult(request, result, data);
     if (result != RESULT_OK || data == null) return;
+    if(request==ModuleUpdatePanel.IMPORT_MODULE){if(data.getData()!=null){if(settingsPages.modulePanel==null)settingsPages.updateSettings();settingsPages.modulePanel.importResult(data.getData());}return;}
+    if(request==SettingsPages.IMPORT_PATCH){if(data.getData()!=null)settingsPages.importPatchResult(data.getData());return;}
     if(request==IMPORT||request==IMPORT_IMAGE){
       if(attachmentPickerGeneration!=attachments.generation)return;
       ArrayList<Uri> uris=new ArrayList<>();

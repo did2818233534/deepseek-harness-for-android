@@ -1,5 +1,6 @@
 package dev.guga.dsh;
 import dev.guga.dsh.settings.Settings;
+import dev.guga.dsh.settings.ModelEndpoint;
 import dev.guga.dsh.files.FileTools;
 
 import fi.iki.elonen.NanoHTTPD;
@@ -15,6 +16,7 @@ final class NativeBridge extends NanoHTTPD {
 
   volatile HarnessService service;
   final Settings settings;
+  final java.util.concurrent.ConcurrentHashMap<String,java.util.concurrent.atomic.AtomicLong> networkEpochs=new java.util.concurrent.ConcurrentHashMap<>();
   final android.content.Context appContext;
   final FileTools files;
   final String token;
@@ -103,6 +105,7 @@ final class NativeBridge extends NanoHTTPD {
           return ok(new JSONObject().put("ok", true));
         case "/cancel-network":
           String sessionId=input.optString("sessionId");
+          networkEpochs.computeIfAbsent(sessionId,id->new java.util.concurrent.atomic.AtomicLong()).incrementAndGet();
           for(okhttp3.OkHttpClient client:new okhttp3.OkHttpClient[]{api,web}){
             for(okhttp3.Call call:client.dispatcher().runningCalls())if(sessionId.equals(call.request().tag(String.class)))call.cancel();
             for(okhttp3.Call call:client.dispatcher().queuedCalls())if(sessionId.equals(call.request().tag(String.class)))call.cancel();
@@ -126,8 +129,11 @@ final class NativeBridge extends NanoHTTPD {
       String msg =
         e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
       try {
-        String secret = settings.apiKey();
-        if (!secret.isEmpty()) msg = msg.replace(secret, "[已隐藏]");
+        for (dev.guga.dsh.settings.ProviderRegistry.Provider entry : dev.guga.dsh.settings.ProviderRegistry.ALL) {
+          String protocol=entry.id;
+          String secret = settings.apiKey(protocol);
+          if (!secret.isEmpty()) msg = msg.replace(secret, "[已隐藏]");
+        }
       } catch (Exception ignored) {
         /* Original failure is reported without reading unavailable credentials. */
       }
@@ -155,28 +161,23 @@ final class NativeBridge extends NanoHTTPD {
     }
   }
 
-  private Request request(String url, String body) throws Exception {
-    String key = settings.apiKey();
-    if (key.isEmpty()) throw new IOException("请在设置中填写 API Key");
-    return new Request.Builder()
-      .url(url)
-      .header("Authorization", "Bearer " + key)
-      .header("User-Agent", "DSH-for-Android/0.0.1")
-      .post(
-        RequestBody.create(
-          body,
-          MediaType.get("application/json; charset=utf-8")
-        )
-      )
-      .build();
-  }
-
   final java.util.concurrent.ConcurrentHashMap<String,okhttp3.Call> modelCalls=new java.util.concurrent.ConcurrentHashMap<>();
 
   private Response model(JSONObject input) throws Exception {
     String sessionId=input.optString("sessionId");input.remove("sessionId");
     String requestId=input.optString("androidRequestId");input.remove("androidRequestId");
-    okhttp3.Call call=api.newCall(request(settings.base() + "/chat/completions", input.toString()).newBuilder().tag(String.class,sessionId).build());
+    String provider=input.optString("androidProviderId",input.optString("androidProvider",settings.provider()));
+    String protocol=dev.guga.dsh.settings.ProviderRegistry.get(provider).protocol, base=settings.base(provider);
+    input.remove("androidProviderId");
+    String expectedProtocol=input.optString("androidProvider",protocol), expectedBase=input.optString("androidBase",base);
+    String expectedEndpoint=input.optString("androidEndpoint",settings.endpoint(provider,"model"));
+    input.remove("androidProvider");input.remove("androidBase");input.remove("androidEndpoint");
+    if (!protocol.equals(expectedProtocol) || !base.equals(expectedBase) || !expectedEndpoint.equals(settings.endpoint(provider,"model")))
+      throw new IOException("模型服务设置已改变，请重新发送消息");
+    Request request=ModelEndpoint.configured(settings,provider,"model",settings.apiKey(provider))
+      .post(RequestBody.create(input.toString(),MediaType.get("application/json; charset=utf-8")))
+      .tag(String.class,sessionId).build();
+    okhttp3.Call call=api.newCall(request);
     modelCalls.put(requestId,call);
     okhttp3.Response remote;
     try { remote=call.execute(); }
@@ -243,9 +244,33 @@ final class NativeBridge extends NanoHTTPD {
     boolean fetch = "https://api.deepseek.com/v1/tools/fetch".equals(endpoint);
     if (!search && !fetch) throw new IOException("不支持的联网接口");
     if ((search && !settings.webSearch()) || (fetch && !settings.webFetch())) throw new IOException("此联网工具已关闭");
-    try (okhttp3.Response response = api.newBuilder().callTimeout(30, TimeUnit.SECONDS).build().newCall(request(endpoint, input.getJSONObject("body").toString()).newBuilder().tag(String.class,input.optString("sessionId")).build()).execute()) {
-      if (!response.isSuccessful()) throw new IOException("DeepSeek 联网接口返回 HTTP " + response.code());
-      return new JSONObject(new String(FileTools.readLimited(response.body().byteStream(), 8 * 1024 * 1024), java.nio.charset.StandardCharsets.UTF_8));
+    String provider=input.optString("providerId",settings.provider());
+    String protocol=dev.guga.dsh.settings.ProviderRegistry.get(provider).protocol;
+    String session=input.optString("sessionId"), model=input.optString("model",settings.model(provider));
+    java.util.concurrent.atomic.AtomicLong epoch=networkEpochs.computeIfAbsent(session,id->new java.util.concurrent.atomic.AtomicLong());
+    long startedEpoch=epoch.get();
+    WebSearchTools.Guard guard=()->{if(epoch.get()!=startedEpoch)throw new java.util.concurrent.CancellationException("联网请求已取消");};
+    JSONObject body=input.getJSONObject("body");
+    if(search) {
+      String query=body.getString("query");int count=Math.max(1,Math.min(20,body.optInt("count",10)));
+      if(query.trim().isEmpty()||query.length()>2000)throw new IOException("搜索词为空或过长");
+      return WebSearchTools.cloudFirst(()-> {
+        if(ModelEndpoint.ANTHROPIC.equals(protocol))return WebSearchTools.claude(api,settings,provider,model,query,count,session,guard);
+        return providerWeb(provider,search,body,session);
+      },()->{guard.check();return WebSearchTools.localSearch(web,query,count,session);});
     }
+    return WebSearchTools.cloudFirst(()-> {
+      if(ModelEndpoint.ANTHROPIC.equals(protocol))return WebSearchTools.claudeFetch(api,settings,provider,model,body.getString("url"),session,guard);
+      return providerWeb(provider,false,body,session);
+    },()->{guard.check();return WebSearchTools.localFetch(web,body.getString("url"),session);});
+  }
+  JSONObject providerWeb(String provider,boolean search,JSONObject body,String session) throws Exception {
+    String secret=settings.apiKey(provider);
+    String endpoint=settings.endpoint(provider,search?"search":"fetch");
+    Request request=ModelEndpoint.configured(settings,provider,"search",secret).url(endpoint).tag(String.class,session)
+      .post(RequestBody.create(body.toString(),MediaType.get("application/json; charset=utf-8"))).build();
+    JSONObject result=new JSONObject(WebSearchTools.read(api.newBuilder().callTimeout(30,TimeUnit.SECONDS).build(),request));
+    if(search && result.optJSONArray("results")==null || !search && !(result.opt("content") instanceof String))throw new IOException("供应商联网响应格式异常");
+    return result;
   }
 }

@@ -23,7 +23,7 @@ public class ReasoningSettingsTests {
     };
     try {
       Settings settings = new Settings(isolated);
-      assertEquals("max", settings.reasoningEffort());
+      assertEquals("high", settings.reasoningEffort());
       assertEquals("deepseek-v4-pro", settings.model());
       assertEquals("https://api.deepseek.com", settings.base());
       assertTrue(settings.webSearch());assertTrue(settings.webFetch());
@@ -45,6 +45,15 @@ public class ReasoningSettingsTests {
       }
       try { settings.saveReasoningEffort("medium"); fail("invalid effort accepted"); }
       catch (Exception expected) { assertEquals("high", settings.reasoningEffort()); }
+      assertArrayEquals(new String[]{"low","medium","high","xhigh","max"},settings.reasoningOptions("anthropic","claude-opus-5-5").levels);
+      settings.saveReasoningEffort("anthropic","claude-opus-5-5","xhigh");
+      settings.saveReasoningEffort("anthropic","claude-sonnet-4-6","medium");
+      assertEquals("xhigh",new Settings(isolated).reasoningEffort("anthropic","claude-opus-5-5"));
+      assertEquals("medium",settings.reasoningEffort("anthropic","claude-sonnet-4-6"));
+      assertEquals("high",settings.reasoningEffort());
+      assertEquals(0,settings.reasoningOptions("anthropic","custom-alias").levels.length);
+      try{settings.saveReasoningEffort("anthropic","claude-opus-5-5","none");fail();}catch(Exception expected){}
+      assertEquals("xhigh",settings.reasoningEffort("anthropic","claude-opus-5-5"));
     } finally { base.deleteSharedPreferences(name); }
   }
 
@@ -57,7 +66,7 @@ public class ReasoningSettingsTests {
   }
   static void touch(SeekBar bar, int stop) {
     float width = bar.getWidth()-bar.getPaddingLeft()-bar.getPaddingRight();
-    float x = bar.getPaddingLeft()+width*stop/3f;
+    float x = bar.getPaddingLeft()+width*stop/bar.getMax();
     long t = android.os.SystemClock.uptimeMillis();
     MotionEvent down=MotionEvent.obtain(t,t,MotionEvent.ACTION_DOWN,x,bar.getHeight()/2f,0);
     MotionEvent up=MotionEvent.obtain(t,t+30,MotionEvent.ACTION_UP,x,bar.getHeight()/2f,0);
@@ -69,7 +78,11 @@ public class ReasoningSettingsTests {
     SharedPreferences prefs=c.getSharedPreferences("settings",0);
     // No key is read/decrypted and no model/network request is allowed in this test.
     assertFalse("Run this test only in a keyless test emulator",prefs.contains("key"));
-    String before=prefs.getString("reasoningEffort",null);
+    String effortKey="modelEffort.deepseek.deepseek-v4-pro";
+    String before=prefs.getString(effortKey,null);
+    String beforeProvider=prefs.getString("provider",null),beforeModel=prefs.getString("activeModel",null);
+    prefs.edit().putString("provider","deepseek").putString("activeModel","deepseek-v4-pro").commit();
+    boolean nativeBefore=HarnessService.nodeStarted;HarnessService.nodeStarted=true;
     dev.guga.updates.UpdateTestDriver.prefs(c).edit().putString("checkedDay",dev.guga.updates.UpdateTestDriver.today()).commit();
     MainActivity a=(MainActivity)i.startActivitySync(new Intent(c,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
     ModelSettingsPanel[] panel=new ModelSettingsPanel[1];
@@ -84,8 +97,8 @@ public class ReasoningSettingsTests {
           assertEquals(bar.getHeight(),visible.height());
           touch(bar,stop);
           assertEquals(stop,bar.getProgress());
-          assertEquals(ModelSettingsPanel.EFFORTS[stop],new Settings(a).reasoningEffort());
-          assertTrue(bar.getContentDescription().toString().contains(ModelSettingsPanel.EFFORT_LABELS[stop]));
+          assertEquals(new Settings(a).reasoningOptions(panel[0].protocol,panel[0].selected).levels[stop],new Settings(a).reasoningEffort());
+          assertTrue(bar.getContentDescription().toString().contains(new Settings(a).reasoningOptions(panel[0].protocol,panel[0].selected).label(new Settings(a).reasoningOptions(panel[0].protocol,panel[0].selected).levels[stop])));
         });
       }
       i.runOnMainSync(()->{
@@ -104,10 +117,14 @@ public class ReasoningSettingsTests {
         assertEquals(View.GONE,panel[0].state.getVisibility());
       });
       Thread.sleep(4500);
-      StreamingTests.screenshot(c,"reasoning-control.png");
+      ProviderVisualTests.capture(a,"reasoning-control.png");
     } finally {
       i.runOnMainSync(()->{a.busy=false;if(panel[0]!=null){panel[0].close();if(panel[0].dialog!=null)panel[0].dialog.dismiss();}a.finish();});
-      if(before==null)prefs.edit().remove("reasoningEffort").commit();else prefs.edit().putString("reasoningEffort",before).commit();
+      if(before==null)prefs.edit().remove(effortKey).commit();else prefs.edit().putString(effortKey,before).commit();
+      var restore=prefs.edit();
+      if(beforeProvider==null)restore.remove("provider");else restore.putString("provider",beforeProvider);
+      if(beforeModel==null)restore.remove("activeModel");else restore.putString("activeModel",beforeModel);
+      restore.commit();HarnessService.nodeStarted=nativeBefore;
     }
   }
 }
